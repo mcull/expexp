@@ -60,19 +60,24 @@ final class VisionAligner {
     // MARK: - Apply Transforms
 
     private func applyAffine(observation: VNImageTranslationAlignmentObservation, moving: UIImage, referenceSize: CGSize, scale: CGFloat) -> UIImage? {
-        // VN returns transform mapping moving->reference on scaled images.
-        // Scale translation to full-res.
+        // VN transforms are in a bottom-left origin coordinate system. Convert the CGContext
+        // to match Vision/CI coordinates by flipping Y, then apply the transform directly.
         let tScaled = observation.alignmentTransform
-        var t = CGAffineTransform(a: tScaled.a, b: tScaled.b, c: tScaled.c, d: tScaled.d, tx: tScaled.tx * scale, ty: tScaled.ty * scale)
+        let t = CGAffineTransform(a: tScaled.a, b: tScaled.b, c: tScaled.c, d: tScaled.d, tx: tScaled.tx * scale, ty: tScaled.ty * scale)
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = moving.scale
         format.opaque = false
         let renderer = UIGraphicsImageRenderer(size: referenceSize, format: format)
         return renderer.image { ctx in
-            ctx.cgContext.clear(CGRect(origin: .zero, size: referenceSize))
-            ctx.cgContext.concatenate(t)
-            moving.draw(in: CGRect(origin: .zero, size: moving.size))
+            let cg = ctx.cgContext
+            cg.clear(CGRect(origin: .zero, size: referenceSize))
+            // Flip to bottom-left coordinate space
+            cg.translateBy(x: 0, y: referenceSize.height)
+            cg.scaleBy(x: 1, y: -1)
+            // Apply Vision transform and draw
+            cg.concatenate(t)
+            cg.draw(moving.cgImage!, in: CGRect(origin: .zero, size: moving.size))
         }
     }
 
@@ -153,4 +158,3 @@ final class VisionAligner {
         return CGPoint(x: CGFloat(r.x / w), y: CGFloat(r.y / w))
     }
 }
-

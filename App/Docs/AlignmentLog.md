@@ -27,3 +27,7 @@ This running log tracks the alignment module work: what’s done and what’s ne
 - Added a feature flag `CameraModel.isAlignmentEnabled` (default true).
 - In `savePhoto()`, when there are multiple images, each subsequent image is aligned to the first (reference) via `AlignmentEngine` using Vision (translation → homography) before blending.
 - Added simple console logs with model type and runtime per aligned image.
+
+### Fix: Coordinate System for Vision Affine
+- Adjusted `VisionAligner.applyAffine` to flip the Core Graphics context to a bottom-left origin before applying Vision transforms.
+- This corrects horizontal translation direction and prevents exaggerated offsets in live preview.
