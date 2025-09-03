@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var frozenImage: UIImage?
     @State private var showAlert = false
     @State private var alertMessage = ""
+    @State private var focusValue: Double = 0.5
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -18,7 +19,9 @@ struct ContentView: View {
 
                 ZStack {
                     // Live preview constrained to 4:3 box
-                    CameraPreviewView(session: model.controller.session)
+                    CameraPreviewView(session: model.controller.session) { point in
+                        model.controller.focusAt(point: point)
+                    }
                         .frame(width: frameWidth, height: frameHeight)
                         .clipped()
                         .position(x: size.width/2, y: size.height/2)
@@ -46,11 +49,15 @@ struct ContentView: View {
 
             // Controls
             VStack(spacing: 12) {
-                // Slider (not wired)
+                // Manual focus slider
                 HStack {
-                    Image(systemName: "circle.lefthalf.filled").foregroundStyle(.white.opacity(0.8))
-                    Slider(value: .constant(0.5), in: 0...1)
-                    Image(systemName: "circle.righthalf.filled").foregroundStyle(.white.opacity(0.8))
+                    Image(systemName: "minus.magnifyingglass").foregroundStyle(.white.opacity(0.8))
+                    Slider(value: $focusValue, in: 0...1) { editing in
+                        if !editing {
+                            model.controller.setManualFocus(Float(focusValue))
+                        }
+                    }
+                    Image(systemName: "plus.magnifyingglass").foregroundStyle(.white.opacity(0.8))
                 }
                 .padding(.horizontal)
 
@@ -88,8 +95,10 @@ struct ContentView: View {
     private func save() {
         guard let img = frozenImage else { return }
         // Crop to centered 4:3 for ultra-WYSIWYG export
-        let export = cropToFourThree(image: img) ?? img
-        SaveManager.save(export) { ok, err in
+        let croppedImg = cropToFourThree(image: img) ?? img
+        // Apply orientation from when photo was captured
+        let orientedImg = croppedImg.orientedForSaving(model.lastPhotoOrientation)
+        SaveManager.save(orientedImg) { ok, err in
             if ok { alertMessage = "Saved to Photos"; frozenImage = nil }
             else { alertMessage = err?.localizedDescription ?? "Save failed" }
             showAlert = true
@@ -119,13 +128,58 @@ struct ContentView: View {
     }
 }
 
+private extension UIImage {
+    func orientedForSaving(_ deviceOrientation: UIDeviceOrientation) -> UIImage {
+        // Actually rotate the image pixels based on device orientation
+        let rotationAngle: CGFloat
+        
+        switch deviceOrientation {
+        case .portrait:
+            rotationAngle = 0 // No rotation for portrait
+        case .landscapeLeft:
+            rotationAngle = CGFloat.pi // 180 degrees  
+        case .landscapeRight:
+            rotationAngle = 0 // No rotation needed
+        case .portraitUpsideDown:
+            rotationAngle = -CGFloat.pi / 2 // 90 degrees counterclockwise
+        default:
+            rotationAngle = 0 // Default to no rotation
+        }
+        
+        return rotated(by: rotationAngle)
+    }
+    
+    func rotated(by angle: CGFloat) -> UIImage {
+        let rotatedSize = CGRect(origin: .zero, size: size)
+            .applying(CGAffineTransform(rotationAngle: angle))
+            .integral.size
+        
+        UIGraphicsBeginImageContextWithOptions(rotatedSize, false, scale)
+        defer { UIGraphicsEndImageContext() }
+        
+        guard let context = UIGraphicsGetCurrentContext() else { return self }
+        
+        let origin = CGPoint(x: rotatedSize.width / 2, y: rotatedSize.height / 2)
+        context.translateBy(x: origin.x, y: origin.y)
+        context.rotate(by: angle)
+        
+        draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
+        
+        return UIGraphicsGetImageFromCurrentImageContext() ?? self
+    }
+}
+
 final class CameraViewModel: ObservableObject {
     let controller = CameraController()
     @Published var lastPhoto: UIImage?
+    @Published var lastPhotoOrientation: UIDeviceOrientation = .portrait
 
     init() {
-        controller.onPhoto = { [weak self] img in
-            DispatchQueue.main.async { self?.lastPhoto = img }
+        controller.onPhoto = { [weak self] img, orientation in
+            DispatchQueue.main.async { 
+                self?.lastPhoto = img 
+                self?.lastPhotoOrientation = orientation
+            }
         }
     }
 
