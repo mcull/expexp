@@ -137,8 +137,16 @@ class CameraModel: ObservableObject {
                 // Blend multiple images into one if we have more than one
                 let finalImage: UIImage
                 if processedImages.count == 1 {
-                    finalImage = processedImages[0]
-                    print("🖼️ DEBUG: Using single processed image (no blending needed)")
+                    // Align behavior with multi-exposure path: apply the same 90° clockwise
+                    // correction so single-portrait captures are not saved rotated CCW.
+                    if let cg = processedImages[0].cgImage {
+                        let rotated = rotateCGImageClockwise(cg)
+                        finalImage = UIImage(cgImage: rotated, scale: processedImages[0].scale, orientation: .up)
+                        print("🖼️ DEBUG: Single image rotated 90° clockwise for consistent orientation")
+                    } else {
+                        finalImage = processedImages[0]
+                        print("🖼️ DEBUG: Single image used as-is (no CGImage)")
+                    }
                 } else {
                     print("🖼️ DEBUG: Blending \(processedImages.count) processed images...")
                     finalImage = blendImages(processedImages)
