@@ -17,8 +17,8 @@ class CameraModel: ObservableObject {
     @Published var ghostPreviewImages: [UIImage] = []  // Processed images for ghost preview
     @Published var ghostOpacity: Double = 0.5 {        // Control ghost preview opacity
         didSet {
-            // Update overlay in preview to keep alignment exact
-            previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+            // Only adjust opacity; avoid recomposing for smoother slider performance
+            previewView?.setGhostOpacity(CGFloat(1.0 - ghostOpacity))
         }
     }
     
@@ -26,9 +26,8 @@ class CameraModel: ObservableObject {
     /// Keeping this configurable ensures the live preview closely matches the final export.
     @Published var ghostExposureAlpha: Double = 0.8 {
         didSet {
-            previewView?.ghostExposureAlpha = CGFloat(ghostExposureAlpha)
-            // Recompose preview overlay with new alpha
-            previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+            // Update preview's exposure alpha and recompose with existing images
+            previewView?.setExposureAlpha(CGFloat(ghostExposureAlpha), currentImages: ghostPreviewImages)
         }
     }
     @Published var showAlert = false

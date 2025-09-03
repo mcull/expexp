@@ -15,6 +15,10 @@ class PreviewView: UIView, PreviewTarget {
     // This emulates the save-time lighten blend so the slider matches the final look.
     var ghostExposureAlpha: CGFloat = 0.8
     
+    // Cache to avoid redundant recomposition and reduce CPU churn
+    private var currentGhostImageCount: Int = 0
+    private var cachedCompositeImage: CGImage?
+    
     override class var layerClass: AnyClass {
         AVCaptureVideoPreviewLayer.self
     }
@@ -127,6 +131,8 @@ class PreviewView: UIView, PreviewTarget {
     private func setupGhostContainer() {
         ghostContainerLayer.frame = bounds
         ghostContainerLayer.masksToBounds = true
+        // Fix upside-down visuals when layering over AVCaptureVideoPreviewLayer
+        ghostContainerLayer.isGeometryFlipped = true
         // Place above the video preview
         previewLayer.addSublayer(ghostContainerLayer)
         
@@ -136,42 +142,72 @@ class PreviewView: UIView, PreviewTarget {
         ghostCompositeLayer.contentsGravity = previewLayer.videoGravity.layerGravity
         ghostCompositeLayer.opacity = 0
         ghostCompositeLayer.contentsScale = UIScreen.main.scale
+        ghostCompositeLayer.isGeometryFlipped = true
         ghostContainerLayer.addSublayer(ghostCompositeLayer)
     }
     
     // Update overlay images to match preview layer's sizing and gravity exactly
     func updateGhostImages(_ images: [UIImage], opacity: CGFloat) {
-        // Build a single lighten-blended composite, then apply overall opacity
-        if let composite = composeLightenComposite(from: images) {
-            ghostCompositeLayer.contents = composite.cgImage
-        } else {
-            ghostCompositeLayer.contents = nil
+        // Recompose only if image count changed or no cache yet
+        if images.count != currentGhostImageCount || cachedCompositeImage == nil {
+            if let composite = composeLightenComposite(from: images) {
+                cachedCompositeImage = composite.cgImage
+            } else {
+                cachedCompositeImage = nil
+            }
+            currentGhostImageCount = images.count
         }
+        ghostCompositeLayer.contents = cachedCompositeImage
         ghostCompositeLayer.opacity = Float(max(0, min(1, opacity)))
         ghostCompositeLayer.contentsGravity = previewLayer.videoGravity.layerGravity
         ghostCompositeLayer.frame = ghostContainerLayer.bounds
     }
 
+    // Fast path: only change opacity without recomposing
+    func setGhostOpacity(_ opacity: CGFloat) {
+        ghostCompositeLayer.opacity = Float(max(0, min(1, opacity)))
+    }
+
+    // Exposure alpha changed; recompose using existing images if any
+    func setExposureAlpha(_ alpha: CGFloat, currentImages: [UIImage]) {
+        ghostExposureAlpha = alpha
+        // Force recomposition next update
+        cachedCompositeImage = nil
+        updateGhostImages(currentImages, opacity: CGFloat(ghostCompositeLayer.opacity))
+    }
+
     // Creates a single image by stacking with lighten blend, similar to save path
     private func composeLightenComposite(from images: [UIImage]) -> UIImage? {
-        guard let first = images.first else { return nil }
-        let canvasSize = first.size
+        guard !images.isEmpty else { return nil }
+        // Render at preview size for performance; fall back to first image size if not laid out yet
+        let fallback = images[0].size
+        let canvasSize = ghostContainerLayer.bounds.size == .zero ? fallback : ghostContainerLayer.bounds.size
         let format = UIGraphicsImageRendererFormat()
-        format.scale = first.scale
+        format.scale = UIScreen.main.scale
         format.opaque = false
         let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
         let img = renderer.image { ctx in
             ctx.cgContext.clear(CGRect(origin: .zero, size: canvasSize))
-            let rect = CGRect(origin: .zero, size: canvasSize)
+            // Draw each image aspect-fill into the canvas
             for image in images {
                 guard let cg = image.cgImage else { continue }
                 ctx.cgContext.setBlendMode(.lighten)
                 // Use configurable per-exposure alpha so preview matches save-time blend
                 ctx.cgContext.setAlpha(ghostExposureAlpha)
-                ctx.cgContext.draw(cg, in: rect)
+                let drawRect = aspectFillRect(forImageSize: CGSize(width: cg.width, height: cg.height), inCanvas: canvasSize)
+                ctx.cgContext.draw(cg, in: drawRect)
             }
         }
         return img
+    }
+
+    private func aspectFillRect(forImageSize imageSize: CGSize, inCanvas canvasSize: CGSize) -> CGRect {
+        let scale = max(canvasSize.width / imageSize.width, canvasSize.height / imageSize.height)
+        let width = imageSize.width * scale
+        let height = imageSize.height * scale
+        let x = (canvasSize.width - width) / 2
+        let y = (canvasSize.height - height) / 2
+        return CGRect(x: x, y: y, width: width, height: height)
     }
 }
 
