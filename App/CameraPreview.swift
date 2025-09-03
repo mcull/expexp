@@ -126,13 +126,13 @@ class PreviewView: UIView, PreviewTarget {
         // Keep ghost container and composite layer in sync with preview layer bounds
         ghostContainerLayer.frame = previewLayer.bounds
         ghostCompositeLayer.frame = ghostContainerLayer.bounds
+        // Preserve vertical flip on layout resets
+        ghostCompositeLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
     }
     
     private func setupGhostContainer() {
         ghostContainerLayer.frame = bounds
         ghostContainerLayer.masksToBounds = true
-        // Fix upside-down visuals when layering over AVCaptureVideoPreviewLayer
-        ghostContainerLayer.isGeometryFlipped = true
         // Place above the video preview
         previewLayer.addSublayer(ghostContainerLayer)
         
@@ -142,7 +142,8 @@ class PreviewView: UIView, PreviewTarget {
         ghostCompositeLayer.contentsGravity = previewLayer.videoGravity.layerGravity
         ghostCompositeLayer.opacity = 0
         ghostCompositeLayer.contentsScale = UIScreen.main.scale
-        ghostCompositeLayer.isGeometryFlipped = true
+        // Fix vertical mirroring by flipping the composite layer vertically
+        ghostCompositeLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
         ghostContainerLayer.addSublayer(ghostCompositeLayer)
     }
     
