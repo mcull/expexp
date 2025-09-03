@@ -11,6 +11,10 @@ class PreviewView: UIView, PreviewTarget {
     private let ghostContainerLayer = CALayer()
     private let ghostCompositeLayer = CALayer()
     
+    // Configurable per-exposure opacity used during preview composition.
+    // This emulates the save-time lighten blend so the slider matches the final look.
+    var ghostExposureAlpha: CGFloat = 0.8
+    
     override class var layerClass: AnyClass {
         AVCaptureVideoPreviewLayer.self
     }
@@ -162,7 +166,8 @@ class PreviewView: UIView, PreviewTarget {
             for image in images {
                 guard let cg = image.cgImage else { continue }
                 ctx.cgContext.setBlendMode(.lighten)
-                ctx.cgContext.setAlpha(0.8) // emulate save-time alpha per exposure
+                // Use configurable per-exposure alpha so preview matches save-time blend
+                ctx.cgContext.setAlpha(ghostExposureAlpha)
                 ctx.cgContext.draw(cg, in: rect)
             }
         }
@@ -197,6 +202,7 @@ struct CameraPreview: UIViewRepresentable {
         let preview = PreviewView()
         preview.onTapToFocus = onTapToFocus
         source.connect(to: preview)
+        // Keep preview's per-exposure alpha consistent with model defaults if used
         return preview
     }
     
@@ -215,6 +221,8 @@ struct CameraPreviewWithModel: UIViewRepresentable {
         preview.onTapToFocus = onTapToFocus
         cameraModel.previewSource.connect(to: preview)
         cameraModel.previewView = preview  // Store reference
+        // Initialize preview's per-exposure alpha to match model setting
+        preview.ghostExposureAlpha = CGFloat(cameraModel.ghostExposureAlpha)
         return preview
     }
     

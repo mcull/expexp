@@ -15,6 +15,9 @@ struct ContentView: View {
                     Spacer()
                     
                     // Ghost opacity slider (only show if there are ghost images)
+                    // Note: Slider maps 0 (left) -> full-strength ghost composite, 1 (right) -> live camera only.
+                    // The ghost composite uses lighten blend with a configurable per-exposure alpha
+                    // to emulate save-time blending as closely as possible.
                     if !cameraModel.ghostPreviewImages.isEmpty {
                         VStack(spacing: 10) {
                             Text("Ghost Opacity")

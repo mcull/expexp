@@ -21,6 +21,16 @@ class CameraModel: ObservableObject {
             previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
         }
     }
+    
+    /// Per-exposure alpha used for both preview and save-time lighten blends.
+    /// Keeping this configurable ensures the live preview closely matches the final export.
+    @Published var ghostExposureAlpha: Double = 0.8 {
+        didSet {
+            previewView?.ghostExposureAlpha = CGFloat(ghostExposureAlpha)
+            // Recompose preview overlay with new alpha
+            previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+        }
+    }
     @Published var showAlert = false
     @Published var alertMessage = ""
     
@@ -193,9 +203,10 @@ class CameraModel: ObservableObject {
             
             // Use lighten blend mode for ghostly effect with full saturation
             context.setBlendMode(.lighten)
-            context.setAlpha(0.8)  // Slightly transparent for ghosting
+            // Slight transparency per exposure; configurable to match preview
+            context.setAlpha(CGFloat(ghostExposureAlpha))
             context.draw(cgImage, in: drawRect)
-            print("🎨 DEBUG: Drew image \(index + 1) with lighten blend mode, alpha: 0.8")
+            print("🎨 DEBUG: Drew image \(index + 1) with lighten blend mode, alpha: \(ghostExposureAlpha)")
         }
         
         guard let blendedCGImage = context.makeImage() else {
