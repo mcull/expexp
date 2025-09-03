@@ -16,6 +16,7 @@ class CameraModel: ObservableObject {
     @Published var alertMessage = ""
     
     private var captureOrientation: UIDeviceOrientation = .portrait
+    private var captureCamera: AVCaptureDevice.Position = .back
     
     var previewSource: PreviewSource {
         captureService
@@ -40,15 +41,18 @@ class CameraModel: ObservableObject {
     }
     
     func capturePhoto() {
-        // Capture the current device orientation at the moment the shutter is pressed
+        // Capture the current device orientation and camera position at the moment the shutter is pressed
         captureOrientation = UIDevice.current.orientation
         
         Task {
             do {
+                // Get camera position before capture
+                captureCamera = await captureService.currentCameraPosition
+                
                 let (image, photo) = try await captureService.capturePhotoWithRawData()
                 
-                // Apply rotation based on device orientation at capture time
-                let rotatedImage = rotateImage(image, for: captureOrientation)
+                // Apply rotation based on device orientation and camera position at capture time
+                let rotatedImage = rotateImage(image, for: captureOrientation, cameraPosition: captureCamera)
                 
                 capturedImage = rotatedImage
                 capturedPhoto = photo
@@ -92,8 +96,9 @@ class CameraModel: ObservableObject {
         capturedPhoto = nil
     }
     
-    private func rotateImage(_ image: UIImage, for orientation: UIDeviceOrientation) -> UIImage {
-        // Get the rotation angle based on device orientation
+    private func rotateImage(_ image: UIImage, for orientation: UIDeviceOrientation, cameraPosition: AVCaptureDevice.Position) -> UIImage {
+        
+        // Get the rotation angle based on device orientation and camera position
         let rotationAngle: CGFloat
         
         switch orientation {
@@ -102,9 +107,19 @@ class CameraModel: ObservableObject {
         case .portraitUpsideDown:
             rotationAngle = .pi // 180 degrees
         case .landscapeLeft:
-            rotationAngle = -.pi / 2 // 90 degrees counter-clockwise
+            // For front camera, swap left and right rotations due to mirror effect
+            if cameraPosition == .front {
+                rotationAngle = .pi / 2 // Use right rotation for left tilt
+            } else {
+                rotationAngle = -.pi / 2 // Standard left rotation for rear camera
+            }
         case .landscapeRight:
-            rotationAngle = .pi / 2 // 90 degrees clockwise
+            // For front camera, swap left and right rotations due to mirror effect
+            if cameraPosition == .front {
+                rotationAngle = -.pi / 2 // Use left rotation for right tilt
+            } else {
+                rotationAngle = .pi / 2 // Standard right rotation for rear camera
+            }
         default:
             // For unknown, faceUp, faceDown orientations, don't rotate
             rotationAngle = 0

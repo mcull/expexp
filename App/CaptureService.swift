@@ -80,6 +80,10 @@ actor CaptureService {
         return try await photoCapture.capturePhotoWithRawData()
     }
     
+    var currentCameraPosition: AVCaptureDevice.Position {
+        return activeVideoInput?.device.position ?? .back
+    }
+    
     func switchCamera() async throws {
         guard let currentInput = activeVideoInput else { return }
         
