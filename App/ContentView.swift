@@ -37,13 +37,16 @@ struct ContentView: View {
                     }
 
                     // Letterbox overlays to emphasize 4:3 viewfinder
-                    VStack(spacing: 0) {
-                        Color.black.opacity(0.5).frame(height: vPad)
-                        Spacer(minLength: 0)
-                        Color.black.opacity(0.5).frame(height: vPad)
+                    GeometryReader { fullGeo in
+                        VStack(spacing: 0) {
+                            // Top letterbox extends from very top to 4:3 viewport
+                            Color.black.opacity(0.5).frame(height: (fullGeo.size.height - frameHeight) / 2)
+                            Spacer(minLength: frameHeight) // 4:3 viewport area (transparent)
+                            Color.black.opacity(0.5).frame(height: vPad)
+                        }
                     }
                     .allowsHitTesting(false)
-                    .ignoresSafeArea()
+                    .ignoresSafeArea(.all)
                 }
             }
 
