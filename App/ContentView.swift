@@ -38,10 +38,10 @@ struct ContentView: View {
                     }
                     
                     ZStack(alignment: .center) {
-                        // Left and right control groups horizontally, centered vertically
-                        HStack {
-                            // Left group: flip button + transient saved thumbnail
-                            ZStack(alignment: .topLeading) {
+                        // Left and right control groups horizontally, align bottoms
+                        HStack(alignment: .bottom) {
+                            // Left group: flip button + transient saved thumbnail inline
+                            HStack(alignment: .bottom, spacing: 16) {
                                 Button(action: cameraModel.switchCamera) {
                                     Image(systemName: "arrow.triangle.2.circlepath.camera")
                                         .font(.title)
@@ -58,18 +58,17 @@ struct ContentView: View {
                                                 .stroke(Color.white.opacity(0.9), lineWidth: 1)
                                         )
                                         .transition(.opacity)
-                                        .offset(x: -8, y: -48)
+                                    // No offset: keep in-row, bottom-aligned
                                 }
                             }
                             Spacer()
-                            // Right group: save and clear
-                            HStack(spacing: 16) {
+                            // Right group: save and clear with a bit more spacing
+                            HStack(alignment: .bottom, spacing: 28) {
                                 Button(action: cameraModel.savePhoto) {
-                                    ZStack {
+                                    ZStack(alignment: .topTrailing) {
                                         Image(systemName: "square.and.arrow.down")
                                             .font(.title)
                                             .foregroundColor(!cameraModel.capturedPhotos.isEmpty ? .white : .gray)
-                                        
                                         if !cameraModel.capturedPhotos.isEmpty {
                                             Text("\(cameraModel.capturedPhotos.count)")
                                                 .font(.caption)
@@ -80,7 +79,7 @@ struct ContentView: View {
                                                         .fill(Color.yellow)
                                                         .frame(width: 20, height: 20)
                                                 )
-                                                .offset(x: 12, y: -12)
+                                                .offset(x: 10, y: -6)
                                         }
                                     }
                                 }
@@ -95,7 +94,7 @@ struct ContentView: View {
                                 .accessibilityLabel("Clear buffer")
                             }
                         }
-                        // Center: shutter button always centered horizontally
+                        // Center: shutter button always centered horizontally, bottom-aligned with row
                         Button(action: cameraModel.capturePhoto) {
                             Circle()
                                 .fill(Color.white)
