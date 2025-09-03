@@ -33,6 +33,14 @@ struct ContentView: View {
                                     .font(.title3)
                                     .foregroundColor(.white)
                             }
+                            // Alignment toggle
+                            HStack(spacing: 8) {
+                                Image(systemName: "wand.and.stars")
+                                    .foregroundColor(cameraModel.isAlignmentEnabled ? .yellow : .gray)
+                                Toggle("Snap Align", isOn: $cameraModel.isAlignmentEnabled)
+                                    .labelsHidden()
+                                    .tint(.yellow)
+                            }
                         }
                         .padding(.bottom, 20)
                     }

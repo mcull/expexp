@@ -88,8 +88,8 @@ class CameraModel: ObservableObject {
                 // Rotate ghost to match camera preview orientation  
                 let rotatedGhost = rotateImageClockwise(image)
                 ghostPreviewImages.append(rotatedGhost)
-                // Update overlay within the preview layer to ensure perfect alignment
-                previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+                // Update overlay (optionally with Vision alignment) for live preview
+                updateGhostPreviewOverlay()
                 print("📷 DEBUG: Ghost image size: \(rotatedGhost.size), scale: \(rotatedGhost.scale) (rotated to match preview)")
                 
                 print("📷 DEBUG: Total captured images: \(capturedRawImages.count) (raw + \(ghostPreviewImages.count) ghost previews)")
@@ -219,6 +219,58 @@ class CameraModel: ObservableObject {
         capturedPhotos.removeAll()
         ghostPreviewImages.removeAll()
         previewView?.updateGhostImages([], opacity: 0)
+    }
+
+    // MARK: - Live Ghost Preview Alignment
+    private func updateGhostPreviewOverlay() {
+        guard let canvasSize = previewView?.previewLayer.bounds.size, canvasSize.width > 0, canvasSize.height > 0 else {
+            // Fallback: draw originals
+            previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+            return
+        }
+
+        // Scale all ghosts to preview canvas
+        let scaled = ghostPreviewImages.map { scaleImage($0, toAspectFill: canvasSize) }
+
+        guard isAlignmentEnabled else {
+            previewView?.updateGhostImages(scaled, opacity: CGFloat(1.0 - ghostOpacity))
+            return
+        }
+
+        guard let first = scaled.first else {
+            previewView?.updateGhostImages([], opacity: CGFloat(1.0 - ghostOpacity))
+            return
+        }
+
+        // Align subsequent images to the first using Vision at preview scale
+        var aligned: [UIImage] = [first]
+        for img in scaled.dropFirst() {
+            let opts = AlignmentOptions(preferHomography: true,
+                                        enableVisionPrealign: true,
+                                        enableLocalRefine: false,
+                                        downscaleTargetMP: 1.0,
+                                        timeBudgetMS: 80,
+                                        useAppleVision: true)
+            let res = AlignmentEngine.shared.align(moving: img, reference: first, options: opts)
+            aligned.append(res.alignedImage)
+        }
+        previewView?.updateGhostImages(aligned, opacity: CGFloat(1.0 - ghostOpacity))
+    }
+
+    private func scaleImage(_ image: UIImage, toAspectFill canvasSize: CGSize) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = UIScreen.main.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
+        return renderer.image { ctx in
+            let imgSize = image.size
+            let s = max(canvasSize.width / imgSize.width, canvasSize.height / imgSize.height)
+            let w = imgSize.width * s
+            let h = imgSize.height * s
+            let x = (canvasSize.width - w) / 2
+            let y = (canvasSize.height - h) / 2
+            image.draw(in: CGRect(x: x, y: y, width: w, height: h))
+        }
     }
 
     private func makeThumbnail(from image: UIImage, maxSide: CGFloat) -> UIImage? {
