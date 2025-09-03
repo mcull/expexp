@@ -126,8 +126,8 @@ class PreviewView: UIView, PreviewTarget {
         // Keep ghost container and composite layer in sync with preview layer bounds
         ghostContainerLayer.frame = previewLayer.bounds
         ghostCompositeLayer.frame = ghostContainerLayer.bounds
-        // Preserve vertical flip on layout resets
-        ghostCompositeLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
+        // Preserve flips on layout resets (vertical always, horizontal if preview is mirrored)
+        applyCompositeTransform()
     }
     
     private func setupGhostContainer() {
@@ -142,8 +142,8 @@ class PreviewView: UIView, PreviewTarget {
         ghostCompositeLayer.contentsGravity = previewLayer.videoGravity.layerGravity
         ghostCompositeLayer.opacity = 0
         ghostCompositeLayer.contentsScale = UIScreen.main.scale
-        // Fix vertical mirroring by flipping the composite layer vertically
-        ghostCompositeLayer.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
+        // Apply initial flips to match preview (vertical flip; add horizontal if mirrored)
+        applyCompositeTransform()
         ghostContainerLayer.addSublayer(ghostCompositeLayer)
     }
     
@@ -209,6 +209,20 @@ class PreviewView: UIView, PreviewTarget {
         let x = (canvasSize.width - width) / 2
         let y = (canvasSize.height - height) / 2
         return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    // Apply vertical flip always to match preview's coordinate system, and
+    // horizontal flip when the preview connection is mirrored (front camera).
+    private func applyCompositeTransform() {
+        let isMirrored = previewLayer.connection?.isVideoMirrored ?? false
+        let sx: CGFloat = isMirrored ? -1 : 1
+        let sy: CGFloat = -1
+        ghostCompositeLayer.setAffineTransform(CGAffineTransform(scaleX: sx, y: sy))
+    }
+
+    // Public hook to refresh mirroring when camera changes
+    func refreshMirroring() {
+        applyCompositeTransform()
     }
 }
 

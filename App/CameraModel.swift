@@ -95,6 +95,8 @@ class CameraModel: ObservableObject {
         Task {
             do {
                 try await captureService.switchCamera()
+                // Refresh overlay mirroring to match new camera connection
+                previewView?.refreshMirroring()
             } catch {
                 alertMessage = "Failed to switch camera: \(error.localizedDescription)"
                 showAlert = true
