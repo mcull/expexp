@@ -92,9 +92,13 @@ struct ContentView: View {
                                         .font(.title)
                                         .foregroundColor(!cameraModel.capturedPhotos.isEmpty ? .white : .gray)
                                 }
+                                .offset(y: 5) // Drop the [x] slightly lower for visual balance
                                 .disabled(cameraModel.capturedPhotos.isEmpty)
                                 .accessibilityLabel("Clear buffer")
                             }
+                            // Fully hide right-side controls until first capture
+                            .opacity(cameraModel.capturedPhotos.isEmpty ? 0 : 1)
+                            .allowsHitTesting(!cameraModel.capturedPhotos.isEmpty)
                         }
                         // Center: shutter button always centered horizontally, bottom-aligned with row
                         Button(action: cameraModel.capturePhoto) {
