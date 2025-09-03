@@ -7,9 +7,9 @@ class PreviewView: UIView, PreviewTarget {
     var onTapToFocus: ((CGPoint) -> Void)?
     private var focusIndicatorView: UIView?
     
-    // Container for ghost overlay images to ensure perfect alignment
+    // Single composite overlay to avoid per-layer alpha differences
     private let ghostContainerLayer = CALayer()
-    private var ghostImageLayers: [CALayer] = []
+    private let ghostCompositeLayer = CALayer()
     
     override class var layerClass: AnyClass {
         AVCaptureVideoPreviewLayer.self
@@ -115,11 +115,9 @@ class PreviewView: UIView, PreviewTarget {
     
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Keep ghost container and its sublayers in sync with preview layer bounds
+        // Keep ghost container and composite layer in sync with preview layer bounds
         ghostContainerLayer.frame = previewLayer.bounds
-        for layer in ghostImageLayers {
-            layer.frame = ghostContainerLayer.bounds
-        }
+        ghostCompositeLayer.frame = ghostContainerLayer.bounds
     }
     
     private func setupGhostContainer() {
@@ -127,40 +125,48 @@ class PreviewView: UIView, PreviewTarget {
         ghostContainerLayer.masksToBounds = true
         // Place above the video preview
         previewLayer.addSublayer(ghostContainerLayer)
+        
+        // Configure composite layer
+        ghostCompositeLayer.frame = ghostContainerLayer.bounds
+        ghostCompositeLayer.masksToBounds = true
+        ghostCompositeLayer.contentsGravity = previewLayer.videoGravity.layerGravity
+        ghostCompositeLayer.opacity = 0
+        ghostCompositeLayer.contentsScale = UIScreen.main.scale
+        ghostContainerLayer.addSublayer(ghostCompositeLayer)
     }
     
     // Update overlay images to match preview layer's sizing and gravity exactly
     func updateGhostImages(_ images: [UIImage], opacity: CGFloat) {
-        // Rebuild sublayers if count changed
-        if images.count != ghostImageLayers.count {
-            ghostImageLayers.forEach { $0.removeFromSuperlayer() }
-            ghostImageLayers = images.map { _ in CALayer() }
-            for layer in ghostImageLayers {
-                layer.frame = ghostContainerLayer.bounds
-                layer.masksToBounds = true
-                ghostContainerLayer.addSublayer(layer)
+        // Build a single lighten-blended composite, then apply overall opacity
+        if let composite = composeLightenComposite(from: images) {
+            ghostCompositeLayer.contents = composite.cgImage
+        } else {
+            ghostCompositeLayer.contents = nil
+        }
+        ghostCompositeLayer.opacity = Float(max(0, min(1, opacity)))
+        ghostCompositeLayer.contentsGravity = previewLayer.videoGravity.layerGravity
+        ghostCompositeLayer.frame = ghostContainerLayer.bounds
+    }
+
+    // Creates a single image by stacking with lighten blend, similar to save path
+    private func composeLightenComposite(from images: [UIImage]) -> UIImage? {
+        guard let first = images.first else { return nil }
+        let canvasSize = first.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = first.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
+        let img = renderer.image { ctx in
+            ctx.cgContext.clear(CGRect(origin: .zero, size: canvasSize))
+            let rect = CGRect(origin: .zero, size: canvasSize)
+            for image in images {
+                guard let cg = image.cgImage else { continue }
+                ctx.cgContext.setBlendMode(.lighten)
+                ctx.cgContext.setAlpha(0.8) // emulate save-time alpha per exposure
+                ctx.cgContext.draw(cg, in: rect)
             }
         }
-        
-        // Apply images and visual properties
-        for (idx, image) in images.enumerated() {
-            guard idx < ghostImageLayers.count else { continue }
-            let layer = ghostImageLayers[idx]
-            layer.contents = image.cgImage
-            // Match preview gravity to avoid any alignment mismatch
-            layer.contentsGravity = previewLayer.videoGravity.layerGravity
-            layer.opacity = Float(max(0, min(1, opacity)))
-            layer.contentsScale = UIScreen.main.scale
-            layer.frame = ghostContainerLayer.bounds
-        }
-        
-        // If fewer images than layers, hide extras
-        if images.count < ghostImageLayers.count {
-            for i in images.count..<ghostImageLayers.count {
-                ghostImageLayers[i].contents = nil
-                ghostImageLayers[i].opacity = 0
-            }
-        }
+        return img
     }
 }
 
