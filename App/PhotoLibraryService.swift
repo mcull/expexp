@@ -55,9 +55,19 @@ actor PhotoLibraryService {
             throw PhotoLibraryError.accessDenied
         }
         
+        print("💾 DEBUG: Saving image with size: \(image.size), orientation: \(image.imageOrientation.rawValue)")
+        
+        // Convert to data with explicit orientation to avoid Photos framework auto-rotation
+        guard let imageData = image.jpegData(compressionQuality: 0.9) else {
+            throw PhotoLibraryError.invalidPhotoData
+        }
+        
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             PHPhotoLibrary.shared().performChanges {
-                PHAssetCreationRequest.creationRequestForAsset(from: image)
+                // Use data-based creation to maintain exact orientation
+                let creationRequest = PHAssetCreationRequest.forAsset()
+                creationRequest.addResource(with: .photo, data: imageData, options: nil)
+                print("💾 DEBUG: Creating asset from JPEG data to preserve orientation")
             } completionHandler: { success, error in
                 if let error = error {
                     continuation.resume(throwing: error)

@@ -32,54 +32,28 @@ struct ContentView: View {
                         }
                         
                         Button(action: cameraModel.savePhoto) {
-                            Image(systemName: "square.and.arrow.down")
-                                .font(.title)
-                                .foregroundColor(cameraModel.capturedImage != nil ? .white : .gray)
+                            ZStack {
+                                Image(systemName: "square.and.arrow.down")
+                                    .font(.title)
+                                    .foregroundColor(!cameraModel.capturedPhotos.isEmpty ? .white : .gray)
+                                
+                                if !cameraModel.capturedPhotos.isEmpty {
+                                    Text("\(cameraModel.capturedPhotos.count)")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.black)
+                                        .background(
+                                            Circle()
+                                                .fill(Color.yellow)
+                                                .frame(width: 20, height: 20)
+                                        )
+                                        .offset(x: 12, y: -12)
+                                }
+                            }
                         }
-                        .disabled(cameraModel.capturedImage == nil)
+                        .disabled(cameraModel.capturedPhotos.isEmpty)
                     }
                     .padding(.bottom, 50)
-                }
-                
-                if let image = cameraModel.capturedImage {
-                    VStack {
-                        HStack {
-                            Button("Dismiss") {
-                                cameraModel.dismissCapturedImage()
-                            }
-                            .foregroundColor(.white)
-                            .padding()
-                            
-                            Spacer()
-                        }
-                        
-                        Spacer()
-                        
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: 300, maxHeight: 400)
-                            .cornerRadius(10)
-                        
-                        Spacer()
-                        
-                        HStack(spacing: 40) {
-                            Button("Retake") {
-                                cameraModel.dismissCapturedImage()
-                            }
-                            .foregroundColor(.white)
-                            .padding()
-                            
-                            Button("Save") {
-                                cameraModel.savePhoto()
-                            }
-                            .foregroundColor(.white)
-                            .padding()
-                        }
-                        .padding(.bottom, 50)
-                    }
-                    .background(Color.black.opacity(0.8))
-                    .ignoresSafeArea()
                 }
             } else {
                 VStack(spacing: 20) {

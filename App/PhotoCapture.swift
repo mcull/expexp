@@ -1,5 +1,6 @@
 import AVFoundation
 import UIKit
+import CoreImage
 
 class PhotoCapture: NSObject {
     let output = AVCapturePhotoOutput()
@@ -22,14 +23,12 @@ class PhotoCapture: NSObject {
     }
     
     private func createPhotoSettings() -> AVCapturePhotoSettings {
-        let settings: AVCapturePhotoSettings
+        // Use uncompressed format for better blending - this preserves full image data
+        let settings = AVCapturePhotoSettings(format: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ])
         
-        // Use HEIF/HEVC format if available for better quality and smaller file sizes
-        if output.availablePhotoCodecTypes.contains(.hevc) {
-            settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
-        } else {
-            settings = AVCapturePhotoSettings()
-        }
+        print("📸 DEBUG: Using uncompressed BGRA format for better blending")
         
         // Enable automatic flash
         settings.flashMode = .auto
@@ -70,12 +69,23 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
             return
         }
         
+        // Try to get image from pixel buffer first (for uncompressed format)
+        if let pixelBuffer = photo.pixelBuffer {
+            print("📸 DEBUG: Extracting image from pixel buffer (uncompressed)")
+            let image = UIImage.fromPixelBuffer(pixelBuffer)
+            continuation.resume(returning: (image, photo))
+            return
+        }
+        
+        // Fallback to compressed data if pixel buffer not available
         guard let imageData = photo.fileDataRepresentation(),
               let image = UIImage(data: imageData) else {
+            print("📸 DEBUG: Failed to get image data from photo")
             continuation.resume(throwing: CameraError.captureSessionNotRunning)
             return
         }
         
+        print("📸 DEBUG: Using compressed image data as fallback")
         continuation.resume(returning: (image, photo))
     }
     
@@ -87,5 +97,20 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
             continuation.resume(throwing: error)
             cleanup()
         }
+    }
+}
+
+extension UIImage {
+    static func fromPixelBuffer(_ pixelBuffer: CVPixelBuffer) -> UIImage {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext(options: nil)
+        
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            print("📸 DEBUG: Failed to create CGImage from pixel buffer")
+            return UIImage()
+        }
+        
+        print("📸 DEBUG: Successfully created UIImage from pixel buffer, size: \(CGSize(width: cgImage.width, height: cgImage.height))")
+        return UIImage(cgImage: cgImage)
     }
 }

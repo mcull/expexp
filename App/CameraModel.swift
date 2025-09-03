@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import Photos
 import UIKit
+import CoreImage
 
 @MainActor
 class CameraModel: ObservableObject {
@@ -10,8 +11,8 @@ class CameraModel: ObservableObject {
     
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
-    @Published var capturedImage: UIImage?
-    @Published var capturedPhoto: AVCapturePhoto?
+    @Published var capturedPhotos: [AVCapturePhoto] = []
+    private var capturedImages: [UIImage] = []
     @Published var showAlert = false
     @Published var alertMessage = ""
     
@@ -41,21 +42,39 @@ class CameraModel: ObservableObject {
     }
     
     func capturePhoto() {
-        // Capture the current device orientation and camera position at the moment the shutter is pressed
-        captureOrientation = UIDevice.current.orientation
-        
         Task {
             do {
-                // Get camera position before capture
-                captureCamera = await captureService.currentCameraPosition
+                // Only capture orientation and camera position for the first image
+                if capturedImages.isEmpty {
+                    captureOrientation = UIDevice.current.orientation
+                    captureCamera = await captureService.currentCameraPosition
+                    print("📷 DEBUG: First capture - orientation: \(captureOrientation), camera: \(captureCamera)")
+                }
                 
                 let (image, photo) = try await captureService.capturePhotoWithRawData()
+                print("📷 DEBUG: Captured image with size: \(image.size)")
                 
-                // Apply rotation based on device orientation and camera position at capture time
+                // Apply rotation based on device orientation and camera position from first capture
                 let rotatedImage = rotateImage(image, for: captureOrientation, cameraPosition: captureCamera)
+                print("📷 DEBUG: Rotated image size: \(rotatedImage.size)")
                 
-                capturedImage = rotatedImage
-                capturedPhoto = photo
+                // Add to arrays instead of replacing
+                capturedImages.append(rotatedImage)
+                capturedPhotos.append(photo)
+                
+                print("📷 DEBUG: Total captured images: \(capturedImages.count)")
+                
+                // Verify we're getting different images
+                if capturedImages.count > 1 {
+                    let currentImage = rotatedImage
+                    let previousImage = capturedImages[capturedImages.count - 2]
+                    if currentImage.pngData() == previousImage.pngData() {
+                        print("🚨 DEBUG: WARNING - Current image identical to previous image!")
+                    } else {
+                        print("✅ DEBUG: Current image differs from previous - good for blending")
+                    }
+                }
+                
             } catch {
                 alertMessage = "Failed to capture photo: \(error.localizedDescription)"
                 showAlert = true
@@ -86,15 +105,51 @@ class CameraModel: ObservableObject {
     }
     
     func savePhoto() {
-        guard let photo = capturedPhoto, let image = capturedImage else { return }
+        guard !capturedImages.isEmpty else { return }
         
         Task {
             do {
-                // Save the rotated image that's already been processed for display
-                try await photoLibraryService.saveImage(image)
-                alertMessage = "Photo saved successfully!"
-                capturedImage = nil
-                capturedPhoto = nil
+                print("🖼️ DEBUG: Starting save process with \(capturedImages.count) images")
+                print("🖼️ DEBUG: Individual image sizes: \(capturedImages.map { $0.size })")
+                
+                // Blend multiple images into one if we have more than one
+                let finalImage: UIImage
+                if capturedImages.count == 1 {
+                    finalImage = capturedImages[0]
+                    print("🖼️ DEBUG: Using single image (no blending needed)")
+                } else {
+                    print("🖼️ DEBUG: Blending \(capturedImages.count) images...")
+                    finalImage = blendImages(capturedImages)
+                    print("🖼️ DEBUG: Blend complete, checking if result differs from individual images")
+                    
+                    // Verify we actually got a blended result by checking object identity
+                    if let lastImage = capturedImages.last {
+                        if finalImage === lastImage {
+                            print("🚨 DEBUG: CRITICAL - Final image is the SAME OBJECT as last captured image!")
+                        } else {
+                            print("✅ DEBUG: Final image is different object - blending created new image")
+                            
+                            // Additional check - compare a few pixel values instead of full PNG data
+                            let finalCGImage = finalImage.cgImage
+                            let lastCGImage = lastImage.cgImage
+                            if finalCGImage === lastCGImage {
+                                print("🚨 DEBUG: WARNING - Final image shares same CGImage as last image")
+                            } else {
+                                print("✅ DEBUG: Final image has different CGImage - blending worked!")
+                            }
+                        }
+                    }
+                }
+                
+                print("🖼️ DEBUG: Final image size: \(finalImage.size)")
+                
+                // Save the blended image
+                try await photoLibraryService.saveImage(finalImage)
+                alertMessage = capturedImages.count == 1 ? "Photo saved successfully!" : "Multiple exposure saved successfully!"
+                
+                // Clear the buffer for the next set
+                capturedImages.removeAll()
+                capturedPhotos.removeAll()
             } catch {
                 alertMessage = "Failed to save photo: \(error.localizedDescription)"
             }
@@ -102,9 +157,60 @@ class CameraModel: ObservableObject {
         }
     }
     
-    func dismissCapturedImage() {
-        capturedImage = nil
-        capturedPhoto = nil
+    private func blendImages(_ images: [UIImage]) -> UIImage {
+        print("🎨 DEBUG: Starting blend with \(images.count) images")
+        
+        guard let firstImage = images.first, images.count > 1 else {
+            print("🎨 DEBUG: Single image, no blending needed")
+            return images.first ?? UIImage()
+        }
+        
+        print("🎨 DEBUG: Blending multiple images using screen blend mode")
+        
+        // Use the first image as the base canvas
+        let canvasSize = firstImage.size
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        
+        guard let context = CGContext(data: nil,
+                                    width: Int(canvasSize.width),
+                                    height: Int(canvasSize.height),
+                                    bitsPerComponent: 8,
+                                    bytesPerRow: 0,
+                                    space: colorSpace,
+                                    bitmapInfo: bitmapInfo) else {
+            print("🎨 DEBUG: Failed to create CGContext")
+            return firstImage
+        }
+        
+        // Fill with black background for multiple exposure effect
+        context.setFillColor(UIColor.black.cgColor)
+        context.fill(CGRect(origin: .zero, size: canvasSize))
+        
+        // Draw each image with screen blend mode
+        let drawRect = CGRect(origin: .zero, size: canvasSize)
+        
+        for (index, image) in images.enumerated() {
+            guard let cgImage = image.cgImage else {
+                print("🎨 DEBUG: Failed to get CGImage from image \(index)")
+                continue
+            }
+            
+            // Use screen blend mode for multiple exposure effect
+            context.setBlendMode(.screen)
+            context.draw(cgImage, in: drawRect)
+            print("🎨 DEBUG: Drew image \(index + 1) with screen blend mode")
+        }
+        
+        guard let blendedCGImage = context.makeImage() else {
+            print("🎨 DEBUG: Failed to create final blended CGImage")
+            return firstImage
+        }
+        
+        // Create UIImage with correct orientation (up since we already rotated the images)
+        let blendedImage = UIImage(cgImage: blendedCGImage, scale: firstImage.scale, orientation: .up)
+        print("🎨 DEBUG: Created blended image with \(images.count) exposures, orientation: .up")
+        return blendedImage
     }
     
     private func rotateImage(_ image: UIImage, for orientation: UIDeviceOrientation, cameraPosition: AVCaptureDevice.Position) -> UIImage {
