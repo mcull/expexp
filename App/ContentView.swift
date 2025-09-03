@@ -92,7 +92,9 @@ struct ContentView: View {
                                         .font(.title)
                                         .foregroundColor(!cameraModel.capturedPhotos.isEmpty ? .white : .gray)
                                 }
-                                .offset(y: 5) // Drop the [x] slightly lower for visual balance
+                                // Positioning: slightly right to align with the slider's camera icon center,
+                                // and halfway up from the previous 5pt drop
+                                .offset(x: 6, y: 2.5)
                                 .disabled(cameraModel.capturedPhotos.isEmpty)
                                 .accessibilityLabel("Clear buffer")
                             }
