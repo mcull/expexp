@@ -11,22 +11,29 @@ struct ContentView: View {
         ZStack(alignment: .bottom) {
             GeometryReader { geo in
                 let size = geo.size
-                ZStack {
-                    // Fullscreen live preview
-                    CameraPreviewView(session: model.controller.session)
-                        .ignoresSafeArea()
+                // Centered 4:3 viewfinder box
+                let frameWidth = size.width
+                let frameHeight = min(frameWidth * 4.0/3.0, size.height)
+                let vPad = max(0, (size.height - frameHeight) / 2)
 
-                    // Frozen image overlay (WYSIWYG display)
+                ZStack {
+                    // Live preview constrained to 4:3 box
+                    CameraPreviewView(session: model.controller.session)
+                        .frame(width: frameWidth, height: frameHeight)
+                        .clipped()
+                        .position(x: size.width/2, y: size.height/2)
+
+                    // Frozen image overlay in the same 4:3 box (WYSIWYG)
                     if let img = frozenImage {
                         Image(uiImage: img)
                             .resizable()
                             .scaledToFill()
-                            .ignoresSafeArea()
+                            .frame(width: frameWidth, height: frameHeight)
+                            .clipped()
+                            .position(x: size.width/2, y: size.height/2)
                     }
 
-                    // Letterbox overlays to create a centered 4:3 viewfinder
-                    let frameHeight = min(size.width * 4.0/3.0, size.height)
-                    let vPad = max(0, (size.height - frameHeight) / 2)
+                    // Letterbox overlays to emphasize 4:3 viewfinder
                     VStack(spacing: 0) {
                         Color.black.opacity(0.5).frame(height: vPad)
                         Spacer(minLength: 0)
@@ -80,11 +87,35 @@ struct ContentView: View {
 
     private func save() {
         guard let img = frozenImage else { return }
-        SaveManager.save(img) { ok, err in
+        // Crop to centered 4:3 for ultra-WYSIWYG export
+        let export = cropToFourThree(image: img) ?? img
+        SaveManager.save(export) { ok, err in
             if ok { alertMessage = "Saved to Photos"; frozenImage = nil }
             else { alertMessage = err?.localizedDescription ?? "Save failed" }
             showAlert = true
         }
+    }
+
+    private func cropToFourThree(image: UIImage) -> UIImage? {
+        guard let cg = image.cgImage else { return nil }
+        let iw = CGFloat(cg.width)
+        let ih = CGFloat(cg.height)
+        let targetRatio: CGFloat = 4.0/3.0 // height/width in portrait terms
+        // We want a portrait 4:3 crop (h:w = 4:3). Compute crop rect centered.
+        // Compare current h/w to target.
+        let currentRatio = ih / iw
+        var crop: CGRect
+        if currentRatio > targetRatio {
+            // Too tall: reduce height
+            let ch = iw * targetRatio
+            crop = CGRect(x: 0, y: (ih - ch)/2, width: iw, height: ch)
+        } else {
+            // Too wide: reduce width
+            let cw = ih / targetRatio
+            crop = CGRect(x: (iw - cw)/2, y: 0, width: cw, height: ih)
+        }
+        guard let cut = cg.cropping(to: crop.integral) else { return nil }
+        return UIImage(cgImage: cut, scale: image.scale, orientation: image.imageOrientation)
     }
 }
 
@@ -102,4 +133,3 @@ final class CameraViewModel: ObservableObject {
     func stop() { controller.session.stopRunning() }
     func capture() { controller.capture() }
 }
-
