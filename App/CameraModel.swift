@@ -161,24 +161,24 @@ class CameraModel: ObservableObject {
             return firstImage
         }
         
-        // Start with transparent background for normal blending
+        // Start with transparent background for ghostly layering
         context.clear(CGRect(origin: .zero, size: canvasSize))
         
-        // Draw each image with normal blend mode and reduced opacity
         let drawRect = CGRect(origin: .zero, size: canvasSize)
-        let opacity = 1.0 / Float(images.count) // Divide opacity equally among images
         
+        // Option 1: Lighten blend mode - keeps saturation, creates ghostly overlaps
+        // This brightens where images overlap while preserving colors
         for (index, image) in images.enumerated() {
             guard let cgImage = image.cgImage else {
                 print("🎨 DEBUG: Failed to get CGImage from image \(index)")
                 continue
             }
             
-            // Use normal blend mode with reduced opacity for natural multiple exposure
-            context.setBlendMode(.normal)
-            context.setAlpha(CGFloat(opacity))
+            // Use lighten blend mode for ghostly effect with full saturation
+            context.setBlendMode(.lighten)
+            context.setAlpha(0.8)  // Slightly transparent for ghosting
             context.draw(cgImage, in: drawRect)
-            print("🎨 DEBUG: Drew image \(index + 1) with normal blend mode, opacity: \(opacity)")
+            print("🎨 DEBUG: Drew image \(index + 1) with lighten blend mode, alpha: 0.8")
         }
         
         guard let blendedCGImage = context.makeImage() else {
@@ -212,9 +212,9 @@ class CameraModel: ObservableObject {
             return cgImage
         }
         
-        // Apply 90° clockwise rotation transform
-        context.translateBy(x: CGFloat(height), y: 0)
-        context.rotate(by: .pi / 2)  // 90° clockwise
+        // Apply 90° counterclockwise rotation transform
+        context.translateBy(x: 0, y: CGFloat(width))
+        context.rotate(by: -.pi / 2)  // 90° counterclockwise
         
         // Draw the original image in the rotated context
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
