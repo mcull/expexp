@@ -6,13 +6,37 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             if cameraModel.isAuthorized && cameraModel.isSessionRunning {
-                CameraPreview(source: cameraModel.previewSource) { focusPoint in
+                CameraPreviewWithModel(cameraModel: cameraModel) { focusPoint in
                     cameraModel.focusAt(point: focusPoint)
                 }
                 .ignoresSafeArea()
                 
                 VStack {
                     Spacer()
+                    
+                    // Ghost opacity slider (only show if there are ghost images)
+                    if !cameraModel.ghostPreviewImages.isEmpty {
+                        VStack(spacing: 10) {
+                            Text("Ghost Opacity")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                            
+                            HStack(spacing: 15) {
+                                Image(systemName: "square.stack")
+                                    .font(.title3)
+                                    .foregroundColor(.white)
+                                
+                                Slider(value: $cameraModel.ghostOpacity, in: 0...1)
+                                    .accentColor(.white)
+                                    .frame(width: 260)
+                                
+                                Image(systemName: "camera")
+                                    .font(.title3)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .padding(.bottom, 20)
+                    }
                     
                     HStack(spacing: 40) {
                         Button(action: cameraModel.switchCamera) {

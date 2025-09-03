@@ -8,11 +8,19 @@ import CoreImage
 class CameraModel: ObservableObject {
     private let captureService = CaptureService()
     private let photoLibraryService = PhotoLibraryService()
+    var previewView: PreviewView?
     
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
     @Published var capturedPhotos: [AVCapturePhoto] = []
     private var capturedRawImages: [UIImage] = []  // Store raw unprocessed images
+    @Published var ghostPreviewImages: [UIImage] = []  // Processed images for ghost preview
+    @Published var ghostOpacity: Double = 0.5 {        // Control ghost preview opacity
+        didSet {
+            // Update overlay in preview to keep alignment exact
+            previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+        }
+    }
     @Published var showAlert = false
     @Published var alertMessage = ""
     
@@ -54,11 +62,18 @@ class CameraModel: ObservableObject {
                 let (image, photo) = try await captureService.capturePhotoWithRawData()
                 print("📷 DEBUG: Captured raw image with size: \(image.size), orientation: \(image.imageOrientation.displayName)")
                 
-                // Store raw image - NO processing during capture for speed
+                // Store raw image for final processing
                 capturedRawImages.append(image)
                 capturedPhotos.append(photo)
                 
-                print("📷 DEBUG: Total captured images: \(capturedRawImages.count) (raw, unprocessed)")
+                // Rotate ghost to match camera preview orientation  
+                let rotatedGhost = rotateImageClockwise(image)
+                ghostPreviewImages.append(rotatedGhost)
+                // Update overlay within the preview layer to ensure perfect alignment
+                previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+                print("📷 DEBUG: Ghost image size: \(rotatedGhost.size), scale: \(rotatedGhost.scale) (rotated to match preview)")
+                
+                print("📷 DEBUG: Total captured images: \(capturedRawImages.count) (raw + \(ghostPreviewImages.count) ghost previews)")
                 
             } catch {
                 alertMessage = "Failed to capture photo: \(error.localizedDescription)"
@@ -128,6 +143,8 @@ class CameraModel: ObservableObject {
                 // Clear the buffer for the next set
                 capturedRawImages.removeAll()
                 capturedPhotos.removeAll()
+                ghostPreviewImages.removeAll()
+                previewView?.updateGhostImages([], opacity: 0)
             } catch {
                 alertMessage = "Failed to save photo: \(error.localizedDescription)"
             }
@@ -307,6 +324,40 @@ class CameraModel: ObservableObject {
         image.draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
         
         return UIGraphicsGetImageFromCurrentImageContext() ?? image
+    }
+    
+    private func rotateImageClockwise(_ image: UIImage) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+        
+        let width = cgImage.width
+        let height = cgImage.height
+        
+        // Create rotated context (swap width/height for 90° rotation)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        
+        guard let context = CGContext(data: nil,
+                                    width: height,  // swapped
+                                    height: width,  // swapped
+                                    bitsPerComponent: 8,
+                                    bytesPerRow: 0,
+                                    space: colorSpace,
+                                    bitmapInfo: bitmapInfo) else {
+            return image
+        }
+        
+        // Apply 90° counterclockwise rotation transform
+        context.translateBy(x: 0, y: CGFloat(width))
+        context.rotate(by: -.pi / 2)  // 90° counterclockwise
+        
+        // Draw the original image in the rotated context
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        guard let rotatedCGImage = context.makeImage() else {
+            return image
+        }
+        
+        return UIImage(cgImage: rotatedCGImage, scale: image.scale, orientation: .up)
     }
 }
 
