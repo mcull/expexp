@@ -37,28 +37,65 @@ struct ContentView: View {
                         .padding(.bottom, 20)
                     }
                     
-                    HStack(spacing: 40) {
-                        ZStack(alignment: .topLeading) {
-                            Button(action: cameraModel.switchCamera) {
-                                Image(systemName: "arrow.triangle.2.circlepath.camera")
-                                    .font(.title)
-                                    .foregroundColor(.white)
+                    ZStack(alignment: .center) {
+                        // Left and right control groups horizontally, centered vertically
+                        HStack {
+                            // Left group: flip button + transient saved thumbnail
+                            ZStack(alignment: .topLeading) {
+                                Button(action: cameraModel.switchCamera) {
+                                    Image(systemName: "arrow.triangle.2.circlepath.camera")
+                                        .font(.title)
+                                        .foregroundColor(.white)
+                                }
+                                if cameraModel.showSavedThumbnail, let thumb = cameraModel.recentSavedThumbnail {
+                                    Image(uiImage: thumb)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 42, height: 42)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(Color.white.opacity(0.9), lineWidth: 1)
+                                        )
+                                        .transition(.opacity)
+                                        .offset(x: -8, y: -48)
+                                }
                             }
-                            if cameraModel.showSavedThumbnail, let thumb = cameraModel.recentSavedThumbnail {
-                                Image(uiImage: thumb)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 42, height: 42)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.white.opacity(0.9), lineWidth: 1)
-                                    )
-                                    .transition(.opacity)
-                                    .offset(x: -8, y: -48)
+                            Spacer()
+                            // Right group: save and clear
+                            HStack(spacing: 16) {
+                                Button(action: cameraModel.savePhoto) {
+                                    ZStack {
+                                        Image(systemName: "square.and.arrow.down")
+                                            .font(.title)
+                                            .foregroundColor(!cameraModel.capturedPhotos.isEmpty ? .white : .gray)
+                                        
+                                        if !cameraModel.capturedPhotos.isEmpty {
+                                            Text("\(cameraModel.capturedPhotos.count)")
+                                                .font(.caption)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.black)
+                                                .background(
+                                                    Circle()
+                                                        .fill(Color.yellow)
+                                                        .frame(width: 20, height: 20)
+                                                )
+                                                .offset(x: 12, y: -12)
+                                        }
+                                    }
+                                }
+                                .disabled(cameraModel.capturedPhotos.isEmpty)
+                                
+                                Button(action: cameraModel.clearBuffer) {
+                                    Image(systemName: "xmark.circle")
+                                        .font(.title)
+                                        .foregroundColor(!cameraModel.capturedPhotos.isEmpty ? .white : .gray)
+                                }
+                                .disabled(cameraModel.capturedPhotos.isEmpty)
+                                .accessibilityLabel("Clear buffer")
                             }
                         }
-                        
+                        // Center: shutter button always centered horizontally
                         Button(action: cameraModel.capturePhoto) {
                             Circle()
                                 .fill(Color.white)
@@ -77,39 +114,10 @@ struct ContentView: View {
                                     }
                                 )
                         }
-                        
-                        HStack(spacing: 16) {
-                            Button(action: cameraModel.savePhoto) {
-                                ZStack {
-                                    Image(systemName: "square.and.arrow.down")
-                                        .font(.title)
-                                        .foregroundColor(!cameraModel.capturedPhotos.isEmpty ? .white : .gray)
-                                    
-                                    if !cameraModel.capturedPhotos.isEmpty {
-                                        Text("\(cameraModel.capturedPhotos.count)")
-                                            .font(.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.black)
-                                            .background(
-                                                Circle()
-                                                    .fill(Color.yellow)
-                                                    .frame(width: 20, height: 20)
-                                            )
-                                            .offset(x: 12, y: -12)
-                                    }
-                                }
-                            }
-                            .disabled(cameraModel.capturedPhotos.isEmpty)
-                            
-                            Button(action: cameraModel.clearBuffer) {
-                                Image(systemName: "xmark.circle")
-                                    .font(.title)
-                                    .foregroundColor(!cameraModel.capturedPhotos.isEmpty ? .white : .gray)
-                            }
-                            .disabled(cameraModel.capturedPhotos.isEmpty)
-                            .accessibilityLabel("Clear buffer")
-                        }
+                        .buttonStyle(.plain)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 28)
                     .padding(.bottom, 50)
                 }
             } else {
