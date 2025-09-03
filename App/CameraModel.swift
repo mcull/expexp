@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Photos
+import UIKit
 
 @MainActor
 class CameraModel: ObservableObject {
@@ -13,6 +14,8 @@ class CameraModel: ObservableObject {
     @Published var capturedPhoto: AVCapturePhoto?
     @Published var showAlert = false
     @Published var alertMessage = ""
+    
+    private var captureOrientation: UIDeviceOrientation = .portrait
     
     var previewSource: PreviewSource {
         captureService
@@ -37,10 +40,17 @@ class CameraModel: ObservableObject {
     }
     
     func capturePhoto() {
+        // Capture the current device orientation at the moment the shutter is pressed
+        captureOrientation = UIDevice.current.orientation
+        
         Task {
             do {
                 let (image, photo) = try await captureService.capturePhotoWithRawData()
-                capturedImage = image
+                
+                // Apply rotation based on device orientation at capture time
+                let rotatedImage = rotateImage(image, for: captureOrientation)
+                
+                capturedImage = rotatedImage
                 capturedPhoto = photo
             } catch {
                 alertMessage = "Failed to capture photo: \(error.localizedDescription)"
@@ -61,11 +71,12 @@ class CameraModel: ObservableObject {
     }
     
     func savePhoto() {
-        guard let photo = capturedPhoto else { return }
+        guard let photo = capturedPhoto, let image = capturedImage else { return }
         
         Task {
             do {
-                try await photoLibraryService.savePhoto(photo)
+                // Save the rotated image that's already been processed for display
+                try await photoLibraryService.saveImage(image)
                 alertMessage = "Photo saved successfully!"
                 capturedImage = nil
                 capturedPhoto = nil
@@ -79,5 +90,54 @@ class CameraModel: ObservableObject {
     func dismissCapturedImage() {
         capturedImage = nil
         capturedPhoto = nil
+    }
+    
+    private func rotateImage(_ image: UIImage, for orientation: UIDeviceOrientation) -> UIImage {
+        // Get the rotation angle based on device orientation
+        let rotationAngle: CGFloat
+        
+        switch orientation {
+        case .portrait:
+            rotationAngle = 0 // No rotation needed
+        case .portraitUpsideDown:
+            rotationAngle = .pi // 180 degrees
+        case .landscapeLeft:
+            rotationAngle = -.pi / 2 // 90 degrees counter-clockwise
+        case .landscapeRight:
+            rotationAngle = .pi / 2 // 90 degrees clockwise
+        default:
+            // For unknown, faceUp, faceDown orientations, don't rotate
+            rotationAngle = 0
+        }
+        
+        // If no rotation needed, return original image
+        guard rotationAngle != 0 else { return image }
+        
+        // Create a new image context with rotated image
+        let size = image.size
+        let rotatedSize: CGSize
+        
+        // For 90-degree rotations, swap width and height
+        if abs(rotationAngle) == .pi / 2 {
+            rotatedSize = CGSize(width: size.height, height: size.width)
+        } else {
+            rotatedSize = size
+        }
+        
+        UIGraphicsBeginImageContextWithOptions(rotatedSize, false, image.scale)
+        defer { UIGraphicsEndImageContext() }
+        
+        guard let context = UIGraphicsGetCurrentContext() else { return image }
+        
+        // Move to center of the new image
+        context.translateBy(x: rotatedSize.width / 2, y: rotatedSize.height / 2)
+        
+        // Rotate the context
+        context.rotate(by: rotationAngle)
+        
+        // Draw the image (centered on the rotated context)
+        image.draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
+        
+        return UIGraphicsGetImageFromCurrentImageContext() ?? image
     }
 }
