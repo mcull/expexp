@@ -33,6 +33,10 @@ class CameraModel: ObservableObject {
     @Published var showAlert = false
     @Published var alertMessage = ""
     
+    // Recently saved thumbnail for subtle feedback instead of alerts
+    @Published var recentSavedThumbnail: UIImage?
+    @Published var showSavedThumbnail: Bool = false
+    
     private var captureOrientation: UIDeviceOrientation = .portrait
     private var captureCamera: AVCaptureDevice.Position = .back
     
@@ -157,8 +161,22 @@ class CameraModel: ObservableObject {
                 
                 // Save the final image
                 try await photoLibraryService.saveImage(finalImage)
-                alertMessage = capturedRawImages.count == 1 ? "Photo saved successfully!" : "Multiple exposure saved successfully!"
-                
+
+                // Show transient thumbnail instead of success alert
+                if let thumb = makeThumbnail(from: finalImage, maxSide: 64) {
+                    recentSavedThumbnail = thumb
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        showSavedThumbnail = true
+                    }
+                    // Hide after 3 seconds
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        withAnimation(.easeIn(duration: 0.25)) {
+                            self.showSavedThumbnail = false
+                        }
+                    }
+                }
+
                 // Clear the buffer for the next set
                 capturedRawImages.removeAll()
                 capturedPhotos.removeAll()
@@ -166,9 +184,27 @@ class CameraModel: ObservableObject {
                 previewView?.updateGhostImages([], opacity: 0)
             } catch {
                 alertMessage = "Failed to save photo: \(error.localizedDescription)"
+                showAlert = true
             }
-            showAlert = true
         }
+    }
+
+    func clearBuffer() {
+        capturedRawImages.removeAll()
+        capturedPhotos.removeAll()
+        ghostPreviewImages.removeAll()
+        previewView?.updateGhostImages([], opacity: 0)
+    }
+
+    private func makeThumbnail(from image: UIImage, maxSide: CGFloat) -> UIImage? {
+        let longest = max(image.size.width, image.size.height)
+        let scale = min(maxSide / longest, 1)
+        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        UIGraphicsBeginImageContextWithOptions(target, false, 0)
+        image.draw(in: CGRect(origin: .zero, size: target))
+        let result = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return result
     }
     
     private func blendImages(_ images: [UIImage]) -> UIImage {
