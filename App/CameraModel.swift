@@ -52,11 +52,15 @@ class CameraModel: ObservableObject {
                 }
                 
                 let (image, photo) = try await captureService.capturePhotoWithRawData()
-                print("📷 DEBUG: Captured image with size: \(image.size)")
+                print("📷 DEBUG: Captured image with size: \(image.size), orientation: \(image.imageOrientation.displayName)")
+                print("📷 DEBUG: Device orientation: \(captureOrientation.rawValue), Camera: \(captureCamera)")
                 
-                // Apply rotation based on device orientation and camera position from first capture
-                let rotatedImage = rotateImage(image, for: captureOrientation, cameraPosition: captureCamera)
-                print("📷 DEBUG: Rotated image size: \(rotatedImage.size)")
+                // Check if we actually need to rotate - if device is portrait and image is already correct, skip rotation
+                let shouldRotate = shouldRotateImage(image, for: captureOrientation, cameraPosition: captureCamera)
+                print("📷 DEBUG: Should rotate: \(shouldRotate)")
+                
+                let rotatedImage = shouldRotate ? rotateImage(image, for: captureOrientation, cameraPosition: captureCamera) : image
+                print("📷 DEBUG: Final image size: \(rotatedImage.size), orientation: \(rotatedImage.imageOrientation.displayName)")
                 
                 // Add to arrays instead of replacing
                 capturedImages.append(rotatedImage)
@@ -213,6 +217,27 @@ class CameraModel: ObservableObject {
         return blendedImage
     }
     
+    private func shouldRotateImage(_ image: UIImage, for orientation: UIDeviceOrientation, cameraPosition: AVCaptureDevice.Position) -> Bool {
+        print("📷 DEBUG: Checking rotation need - Device: \(orientation.rawValue), Image: \(image.imageOrientation.displayName)")
+        
+        // For portrait device orientation, camera typically provides .right orientation images
+        // In this case, we don't need to rotate since the image is already correct for display
+        if orientation == .portrait && image.imageOrientation == .right {
+            print("📷 DEBUG: Portrait device + Right image orientation = No rotation needed")
+            return false
+        }
+        
+        // If device is portrait and image is already .up, also no rotation needed
+        if orientation == .portrait && image.imageOrientation == .up {
+            print("📷 DEBUG: Portrait device + Up image orientation = No rotation needed") 
+            return false
+        }
+        
+        // For all other combinations, apply rotation
+        print("📷 DEBUG: Will apply rotation for device \(orientation.rawValue) + image \(image.imageOrientation.displayName)")
+        return true
+    }
+    
     private func rotateImage(_ image: UIImage, for orientation: UIDeviceOrientation, cameraPosition: AVCaptureDevice.Position) -> UIImage {
         
         // Get the rotation angle based on device orientation and camera position
@@ -271,5 +296,21 @@ class CameraModel: ObservableObject {
         image.draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
         
         return UIGraphicsGetImageFromCurrentImageContext() ?? image
+    }
+}
+
+extension UIImage.Orientation {
+    var displayName: String {
+        switch self {
+        case .up: return "Up"
+        case .down: return "Down" 
+        case .left: return "Left"
+        case .right: return "Right"
+        case .upMirrored: return "Up Mirrored"
+        case .downMirrored: return "Down Mirrored"
+        case .leftMirrored: return "Left Mirrored"  
+        case .rightMirrored: return "Right Mirrored"
+        @unknown default: return "Unknown"
+        }
     }
 }
