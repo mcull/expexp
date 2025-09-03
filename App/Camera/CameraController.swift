@@ -160,7 +160,7 @@ private extension UIImage {
         case .landscapeLeft:
             rotationAngle = CGFloat.pi / 2 // 90 degrees clockwise (was 180°)
         case .landscapeRight:
-            rotationAngle = -CGFloat.pi // 180 degrees (was 90° counterclockwise)
+            rotationAngle = -CGFloat.pi / 2 // 90 degrees counterclockwise (180° from previous)
         case .portraitUpsideDown:
             rotationAngle = CGFloat.pi // 180 degrees (was 90° clockwise)
         default:
