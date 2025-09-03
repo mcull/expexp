@@ -8,22 +8,24 @@
 
 /* Begin PBXBuildFile section */
 		8B36ECBE8F487D79C5BF6AAD /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */; };
-		B3A794C7E99842CCF0752169 /* ExpexpApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEECD1650CE94D6154C6435C /* ExpexpApp.swift */; };
 		A1B2C3D4E5F6789012345678 /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E2D3C4B5A6987654321098 /* CameraModel.swift */; };
 		B2C3D4E5F6A7890123456789 /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2D3C4B5A6F8976543210987 /* CameraPreview.swift */; };
+		B3A794C7E99842CCF0752169 /* ExpexpApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEECD1650CE94D6154C6435C /* ExpexpApp.swift */; };
 		C3D4E5F6A7B8901234567890 /* CaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C4B5A6F8E9876543210876 /* CaptureService.swift */; };
 		D4E5F6A7B8C9012345678901 /* PhotoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B5A6F8E9D7865432109765 /* PhotoCapture.swift */; };
+		E5F6A7B8C9D0123456789012 /* PhotoLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A6F8E9D7C6754321098654 /* PhotoLibraryService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0693997A4DB833E1D980874D /* Expexp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Expexp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B5A6F8E9D7C6754321098654 /* PhotoLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryService.swift; sourceTree = "<group>"; };
 		BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		CEECD1650CE94D6154C6435C /* ExpexpApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpexpApp.swift; sourceTree = "<group>"; };
-		FC7A21DA945374E0AB9E4119 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		F1E2D3C4B5A6987654321098 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
-		E2D3C4B5A6F8976543210987 /* CameraPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreview.swift; sourceTree = "<group>"; };
-		D3C4B5A6F8E9876543210876 /* CaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureService.swift; sourceTree = "<group>"; };
 		C4B5A6F8E9D7865432109765 /* PhotoCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCapture.swift; sourceTree = "<group>"; };
+		CEECD1650CE94D6154C6435C /* ExpexpApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpexpApp.swift; sourceTree = "<group>"; };
+		D3C4B5A6F8E9876543210876 /* CaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureService.swift; sourceTree = "<group>"; };
+		E2D3C4B5A6F8976543210987 /* CameraPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreview.swift; sourceTree = "<group>"; };
+		F1E2D3C4B5A6987654321098 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
+		FC7A21DA945374E0AB9E4119 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -36,6 +38,7 @@
 				E2D3C4B5A6F8976543210987 /* CameraPreview.swift */,
 				D3C4B5A6F8E9876543210876 /* CaptureService.swift */,
 				C4B5A6F8E9D7865432109765 /* PhotoCapture.swift */,
+				B5A6F8E9D7C6754321098654 /* PhotoLibraryService.swift */,
 				FC7A21DA945374E0AB9E4119 /* Info.plist */,
 			);
 			path = App;
@@ -120,6 +123,7 @@
 				B2C3D4E5F6A7890123456789 /* CameraPreview.swift in Sources */,
 				C3D4E5F6A7B8901234567890 /* CaptureService.swift in Sources */,
 				D4E5F6A7B8C9012345678901 /* PhotoCapture.swift in Sources */,
+				E5F6A7B8C9D0123456789012 /* PhotoLibraryService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -134,7 +138,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = N7ZX6XG86A;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -154,7 +159,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = N7ZX6XG86A;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

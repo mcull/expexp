@@ -48,9 +48,15 @@ actor CaptureService {
         // Configure for photo capture
         captureSession.sessionPreset = .photo
         
-        // Add photo output
+        // Add photo output with enhanced configuration
         if captureSession.canAddOutput(photoCapture.output) {
             captureSession.addOutput(photoCapture.output)
+            
+            // Enable high resolution capture for better image quality
+            photoCapture.output.isHighResolutionCaptureEnabled = true
+            
+            // Enable Live Photo capture if supported (for future Live Photo functionality)
+            photoCapture.output.isLivePhotoCaptureEnabled = photoCapture.output.isLivePhotoCaptureSupported
         } else {
             throw CameraError.addOutputFailed
         }
@@ -68,6 +74,10 @@ actor CaptureService {
     
     func capturePhoto() async throws -> UIImage {
         return try await photoCapture.capturePhoto()
+    }
+    
+    func capturePhotoWithRawData() async throws -> (UIImage, AVCapturePhoto) {
+        return try await photoCapture.capturePhotoWithRawData()
     }
     
     func switchCamera() async throws {

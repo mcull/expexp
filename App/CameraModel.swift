@@ -1,13 +1,16 @@
 import SwiftUI
 import AVFoundation
+import Photos
 
 @MainActor
 class CameraModel: ObservableObject {
     private let captureService = CaptureService()
+    private let photoLibraryService = PhotoLibraryService()
     
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
     @Published var capturedImage: UIImage?
+    @Published var capturedPhoto: AVCapturePhoto?
     @Published var showAlert = false
     @Published var alertMessage = ""
     
@@ -36,8 +39,9 @@ class CameraModel: ObservableObject {
     func capturePhoto() {
         Task {
             do {
-                let image = try await captureService.capturePhoto()
+                let (image, photo) = try await captureService.capturePhotoWithRawData()
                 capturedImage = image
+                capturedPhoto = photo
             } catch {
                 alertMessage = "Failed to capture photo: \(error.localizedDescription)"
                 showAlert = true
@@ -57,22 +61,23 @@ class CameraModel: ObservableObject {
     }
     
     func savePhoto() {
-        guard let image = capturedImage else { return }
+        guard let photo = capturedPhoto else { return }
         
-        UIImageWriteToSavedPhotosAlbum(image, self, #selector(saveCompleted(_:didFinishSavingWithError:contextInfo:)), nil)
-    }
-    
-    @objc private func saveCompleted(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
-        if let error = error {
-            alertMessage = "Failed to save photo: \(error.localizedDescription)"
-        } else {
-            alertMessage = "Photo saved successfully!"
-            capturedImage = nil
+        Task {
+            do {
+                try await photoLibraryService.savePhoto(photo)
+                alertMessage = "Photo saved successfully!"
+                capturedImage = nil
+                capturedPhoto = nil
+            } catch {
+                alertMessage = "Failed to save photo: \(error.localizedDescription)"
+            }
+            showAlert = true
         }
-        showAlert = true
     }
     
     func dismissCapturedImage() {
         capturedImage = nil
+        capturedPhoto = nil
     }
 }
