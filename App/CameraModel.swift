@@ -74,6 +74,17 @@ class CameraModel: ObservableObject {
         }
     }
     
+    func focusAt(point: CGPoint) {
+        Task {
+            do {
+                try await captureService.focusAt(point: point)
+            } catch {
+                alertMessage = "Failed to focus: \(error.localizedDescription)"
+                showAlert = true
+            }
+        }
+    }
+    
     func savePhoto() {
         guard let photo = capturedPhoto, let image = capturedImage else { return }
         

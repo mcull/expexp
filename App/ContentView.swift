@@ -6,8 +6,10 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             if cameraModel.isAuthorized && cameraModel.isSessionRunning {
-                CameraPreview(source: cameraModel.previewSource)
-                    .ignoresSafeArea()
+                CameraPreview(source: cameraModel.previewSource) { focusPoint in
+                    cameraModel.focusAt(point: focusPoint)
+                }
+                .ignoresSafeArea()
                 
                 VStack {
                     Spacer()

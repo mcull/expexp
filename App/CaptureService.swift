@@ -84,6 +84,31 @@ actor CaptureService {
         return activeVideoInput?.device.position ?? .back
     }
     
+    func focusAt(point: CGPoint) async throws {
+        guard let device = activeVideoInput?.device else { return }
+        
+        // Check if the device supports focus
+        guard device.isFocusPointOfInterestSupported else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            
+            // Set focus point
+            device.focusPointOfInterest = point
+            device.focusMode = .autoFocus
+            
+            // Also set exposure point if supported
+            if device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest = point
+                device.exposureMode = .autoExpose
+            }
+            
+        } catch {
+            throw error
+        }
+    }
+    
     func switchCamera() async throws {
         guard let currentInput = activeVideoInput else { return }
         
