@@ -37,10 +37,6 @@ class CameraModel: ObservableObject {
     @Published var recentSavedThumbnail: UIImage?
     @Published var showSavedThumbnail: Bool = false
     private var recentSavedLocalIdentifier: String?
-
-    // Recently saved thumbnail for subtle feedback instead of alerts
-    @Published var recentSavedThumbnail: UIImage?
-    @Published var showSavedThumbnail: Bool = false
     
     private var captureOrientation: UIDeviceOrientation = .portrait
     private var captureCamera: AVCaptureDevice.Position = .back
