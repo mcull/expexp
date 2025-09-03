@@ -3,6 +3,7 @@ import AVFoundation
 import Photos
 import UIKit
 import CoreImage
+import Vision
 
 @MainActor
 class CameraModel: ObservableObject {
@@ -30,6 +31,10 @@ class CameraModel: ObservableObject {
             previewView?.setExposureAlpha(CGFloat(ghostExposureAlpha), currentImages: ghostPreviewImages)
         }
     }
+    
+    // Save-time alignment flag (Vision). When enabled, align subsequent images to the first capture
+    // using Apple Vision (translation → homography) before blending.
+    @Published var isAlignmentEnabled: Bool = true
     @Published var showAlert = false
     @Published var alertMessage = ""
     
@@ -153,8 +158,26 @@ class CameraModel: ObservableObject {
                         print("🖼️ DEBUG: Single image used as-is (no CGImage)")
                     }
                 } else {
-                    print("🖼️ DEBUG: Blending \(processedImages.count) processed images...")
-                    finalImage = blendImages(processedImages)
+                    var imagesForBlend = processedImages
+                    if isAlignmentEnabled {
+                        print("🧭 ALIGN: Aligning \(processedImages.count - 1) images to reference using Vision...")
+                        let reference = processedImages[0]
+                        var aligned: [UIImage] = [reference]
+                        for (idx, img) in processedImages.dropFirst().enumerated() {
+                            let options = AlignmentOptions(preferHomography: true,
+                                                           enableVisionPrealign: true,
+                                                           enableLocalRefine: false,
+                                                           downscaleTargetMP: 1.5,
+                                                           timeBudgetMS: 250,
+                                                           useAppleVision: true)
+                            let res = AlignmentEngine.shared.align(moving: img, reference: reference, options: options)
+                            aligned.append(res.alignedImage)
+                            print("🧭 ALIGN: #\(idx+2) model=\(res.transformModel) runtime=\(res.metrics.runtimeMS)ms")
+                        }
+                        imagesForBlend = aligned
+                    }
+                    print("🖼️ DEBUG: Blending \(imagesForBlend.count) images (aligned: \(isAlignmentEnabled))...")
+                    finalImage = blendImages(imagesForBlend)
                     print("🖼️ DEBUG: Blend complete")
                 }
                 

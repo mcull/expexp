@@ -22,3 +22,8 @@ This running log tracks the alignment module work: what’s done and what’s ne
   - `align(...)` now returns Vision-aligned output when available.
   - `previewAlignForOverlay(...)` uses Vision as a best-effort (fallback to aspect-fill).
 - Next: Optionally integrate with live ghost overlay and save path behind a feature flag; add metrics logging.
+
+### Update: Save-Time Alignment Integration
+- Added a feature flag `CameraModel.isAlignmentEnabled` (default true).
+- In `savePhoto()`, when there are multiple images, each subsequent image is aligned to the first (reference) via `AlignmentEngine` using Vision (translation → homography) before blending.
+- Added simple console logs with model type and runtime per aligned image.
