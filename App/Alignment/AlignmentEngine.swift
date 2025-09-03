@@ -10,6 +10,19 @@ public struct AlignmentOptions {
     public var timeBudgetMS: Int = 80 // preview budget
     public var useAppleVision: Bool = true // prefer Vision when available
     public init() {}
+    public init(preferHomography: Bool,
+                enableVisionPrealign: Bool,
+                enableLocalRefine: Bool,
+                downscaleTargetMP: Double,
+                timeBudgetMS: Int,
+                useAppleVision: Bool) {
+        self.preferHomography = preferHomography
+        self.enableVisionPrealign = enableVisionPrealign
+        self.enableLocalRefine = enableLocalRefine
+        self.downscaleTargetMP = downscaleTargetMP
+        self.timeBudgetMS = timeBudgetMS
+        self.useAppleVision = useAppleVision
+    }
 }
 
 public enum TransformModel {
