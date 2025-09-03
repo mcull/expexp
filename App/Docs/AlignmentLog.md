@@ -13,3 +13,12 @@ This running log tracks the alignment module work: what’s done and what’s ne
   3) Expose metrics; integrate preview alignment (fast path) behind a feature flag.
   4) Implement Vision pre-align and optional local refinement as follow-ups.
 
+### Update: Vision Alignment Wiring
+- Implemented Vision-based alignment in `App/Alignment/VisionAlignment.swift`:
+  - Uses `VNTranslationalImageRegistrationRequest` first; falls back to `VNHomographicImageRegistrationRequest`.
+  - Applies affine via Core Graphics; applies homography via `CIPerspectiveTransform` by warping corner points.
+  - Downscales to ~1–2MP for speed; scales transforms back to full resolution.
+- Integrated into `AlignmentEngine` (options.useAppleVision default true):
+  - `align(...)` now returns Vision-aligned output when available.
+  - `previewAlignForOverlay(...)` uses Vision as a best-effort (fallback to aspect-fill).
+- Next: Optionally integrate with live ghost overlay and save path behind a feature flag; add metrics logging.

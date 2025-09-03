@@ -8,6 +8,7 @@ public struct AlignmentOptions {
     public var enableLocalRefine: Bool = false
     public var downscaleTargetMP: Double = 1.5 // ~1–2MP
     public var timeBudgetMS: Int = 80 // preview budget
+    public var useAppleVision: Bool = true // prefer Vision when available
     public init() {}
 }
 
@@ -40,6 +41,11 @@ public final class AlignmentEngine {
 
     // Stub implementation: returns moving image unmodified and identity transform
     public func align(moving: UIImage, reference: UIImage, options: AlignmentOptions = .init()) -> AlignmentResult {
+        if options.useAppleVision {
+            if let res = VisionAligner.shared.align(moving: moving, reference: reference, targetMP: options.downscaleTargetMP, preferHomography: options.preferHomography) {
+                return AlignmentResult(alignedImage: res.alignedImage, transformModel: res.transformModel, metrics: res.metrics)
+            }
+        }
         let metrics = AlignmentMetrics(runtimeMS: 0, keypointsRef: 0, keypointsMov: 0, matches: 0, inliers: 0, inlierRatio: 0)
         return AlignmentResult(alignedImage: moving, transformModel: .identity, metrics: metrics)
     }
@@ -47,6 +53,14 @@ public final class AlignmentEngine {
     // Preview fast-path: render at preview size; default stub just aspect-fill scales
     public func previewAlignForOverlay(moving: UIImage, referencePreviewSize: CGSize, options: AlignmentOptions = .init()) -> UIImage {
         guard referencePreviewSize.width > 0, referencePreviewSize.height > 0 else { return moving }
+        if options.useAppleVision {
+            // Create a fake reference canvas at the preview size to drive warping
+            let reference = blankImage(size: referencePreviewSize, scale: UIScreen.main.scale)
+            if let res = VisionAligner.shared.align(moving: moving, reference: reference, targetMP: 1.0, preferHomography: options.preferHomography) {
+                return res.alignedImage
+            }
+        }
+        // Fallback: just aspect-fill to preview size
         let target = referencePreviewSize
         let format = UIGraphicsImageRendererFormat()
         format.scale = UIScreen.main.scale
@@ -62,6 +76,17 @@ public final class AlignmentEngine {
             moving.draw(in: CGRect(x: x, y: y, width: w, height: h))
         }
     }
+
+    private func blankImage(size: CGSize, scale: CGFloat) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { ctx in
+            UIColor.black.setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+        }
+    }
 }
 
 // MARK: - Notes
@@ -69,4 +94,3 @@ public final class AlignmentEngine {
 // will be provided by an Objective-C++ wrapper over OpenCV (OCVAligner), and optionally
 // Apple Vision for semantic pre-alignment. Until OpenCV is added to the project and the
 // wrapper is wired into the build, these methods act as no-ops so the app compiles.
-
