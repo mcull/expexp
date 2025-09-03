@@ -33,6 +33,11 @@ class CameraModel: ObservableObject {
     @Published var showAlert = false
     @Published var alertMessage = ""
     
+    // Recently saved asset info for deeplink/thumbnail feedback
+    @Published var recentSavedThumbnail: UIImage?
+    @Published var showSavedThumbnail: Bool = false
+    private var recentSavedLocalIdentifier: String?
+
     // Recently saved thumbnail for subtle feedback instead of alerts
     @Published var recentSavedThumbnail: UIImage?
     @Published var showSavedThumbnail: Bool = false
@@ -159,8 +164,9 @@ class CameraModel: ObservableObject {
                 
                 print("🖼️ DEBUG: Final image size: \(finalImage.size)")
                 
-                // Save the final image
-                try await photoLibraryService.saveImage(finalImage)
+                // Save the final image and capture local identifier for deeplink
+                let localId = try await photoLibraryService.saveImageReturningLocalIdentifier(finalImage)
+                self.recentSavedLocalIdentifier = localId
 
                 // Show transient thumbnail instead of success alert
                 if let thumb = makeThumbnail(from: finalImage, maxSide: 64) {
@@ -205,6 +211,13 @@ class CameraModel: ObservableObject {
         let result = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
         return result
+    }
+
+    func openPhotosApp() {
+        // Best-effort: open Photos app. Apple does not provide a public deep link to a specific asset.
+        // This opens the app (typically to Library/Recents where the image appears).
+        guard let url = URL(string: "photos-redirect://") else { return }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
     
     private func blendImages(_ images: [UIImage]) -> UIImage {

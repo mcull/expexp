@@ -48,17 +48,19 @@ struct ContentView: View {
                                         .foregroundColor(.white)
                                 }
                                 if cameraModel.showSavedThumbnail, let thumb = cameraModel.recentSavedThumbnail {
-                                    Image(uiImage: thumb)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 42, height: 42)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke(Color.white.opacity(0.9), lineWidth: 1)
-                                        )
-                                        .transition(.opacity)
-                                    // No offset: keep in-row, bottom-aligned
+                                    Button(action: cameraModel.openPhotosApp) {
+                                        Image(uiImage: thumb)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 42, height: 42)
+                                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .stroke(Color.white.opacity(0.9), lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .transition(.opacity)
                                 }
                             }
                             Spacer()

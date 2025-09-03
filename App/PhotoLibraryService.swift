@@ -79,6 +79,38 @@ actor PhotoLibraryService {
             }
         }
     }
+
+    // Save and return the localIdentifier of the created asset for later reference.
+    func saveImageReturningLocalIdentifier(_ image: UIImage) async throws -> String {
+        // Confirm the user granted read/write access
+        guard await isPhotoLibraryReadWriteAccessGranted else {
+            throw PhotoLibraryError.accessDenied
+        }
+
+        print("💾 DEBUG: Saving image (with identifier) size: \(image.size), orientation: \(image.imageOrientation.rawValue)")
+
+        guard let imageData = image.jpegData(compressionQuality: 0.9) else {
+            throw PhotoLibraryError.invalidPhotoData
+        }
+
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+            var placeholderId: String?
+            PHPhotoLibrary.shared().performChanges {
+                let creationRequest = PHAssetCreationRequest.forAsset()
+                let options = PHAssetResourceCreationOptions()
+                creationRequest.addResource(with: .photo, data: imageData, options: options)
+                placeholderId = creationRequest.placeholderForCreatedAsset?.localIdentifier
+            } completionHandler: { success, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else if success, let id = placeholderId {
+                    continuation.resume(returning: id)
+                } else {
+                    continuation.resume(throwing: PhotoLibraryError.saveFailed)
+                }
+            }
+        }
+    }
 }
 
 enum PhotoLibraryError: Error, LocalizedError {
