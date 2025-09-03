@@ -156,13 +156,13 @@ private extension UIImage {
         
         switch deviceOrientation {
         case .portrait:
-            rotationAngle = 0 // No rotation for portrait
+            rotationAngle = 0 // No rotation for portrait - works correctly
         case .landscapeLeft:
-            rotationAngle = CGFloat.pi // 180 degrees  
+            rotationAngle = CGFloat.pi / 2 // 90 degrees clockwise (was 180°)
         case .landscapeRight:
-            rotationAngle = 0 // No rotation needed
+            rotationAngle = -CGFloat.pi // 180 degrees (was 90° counterclockwise)
         case .portraitUpsideDown:
-            rotationAngle = -CGFloat.pi / 2 // 90 degrees counterclockwise
+            rotationAngle = CGFloat.pi // 180 degrees (was 90° clockwise)
         default:
             rotationAngle = 0 // Default to no rotation
         }
