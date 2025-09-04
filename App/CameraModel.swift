@@ -242,17 +242,14 @@ class CameraModel: ObservableObject {
             return
         }
 
-        // Align subsequent images to the first using Vision at preview scale
+        // Align subsequent images to the first using Vision (translation only) at preview scale
         var aligned: [UIImage] = [first]
         for img in scaled.dropFirst() {
-            let opts = AlignmentOptions(preferHomography: true,
-                                        enableVisionPrealign: true,
-                                        enableLocalRefine: false,
-                                        downscaleTargetMP: 1.0,
-                                        timeBudgetMS: 80,
-                                        useAppleVision: true)
-            let res = AlignmentEngine.shared.align(moving: img, reference: first, options: opts)
-            aligned.append(res.alignedImage)
+            if let a = translationalAlignPreview(moving: img, reference: first) {
+                aligned.append(a)
+            } else {
+                aligned.append(img)
+            }
         }
         previewView?.updateGhostImages(aligned, opacity: CGFloat(1.0 - ghostOpacity))
     }
@@ -270,6 +267,28 @@ class CameraModel: ObservableObject {
             let x = (canvasSize.width - w) / 2
             let y = (canvasSize.height - h) / 2
             image.draw(in: CGRect(x: x, y: y, width: w, height: h))
+        }
+    }
+
+    // Use Vision translational registration for fast, robust preview alignment in top-left coords
+    private func translationalAlignPreview(moving: UIImage, reference: UIImage) -> UIImage? {
+        guard let refCG = reference.cgImage, let movCG = moving.cgImage else { return nil }
+        let req = VNTranslationalImageRegistrationRequest(targetedCGImage: movCG, options: [:])
+        let handler = VNImageRequestHandler(cgImage: refCG, options: [:])
+        do { try handler.perform([req]) } catch { return nil }
+        guard let obs = req.results?.first as? VNImageTranslationAlignmentObservation else { return nil }
+        let t = obs.alignmentTransform
+        // Convert Vision bottom-left translation to top-left: (tx, -ty)
+        let tx = t.tx
+        let ty = -t.ty
+        let size = reference.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = UIScreen.main.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { ctx in
+            // Draw moving shifted by (tx, ty) in top-left coordinates
+            moving.draw(in: CGRect(origin: CGPoint(x: tx, y: ty), size: moving.size))
         }
     }
 
