@@ -31,3 +31,11 @@ This running log tracks the alignment module work: what’s done and what’s ne
 ### Fix: Coordinate System for Vision Affine
 - Adjusted `VisionAligner.applyAffine` to flip the Core Graphics context to a bottom-left origin before applying Vision transforms.
 - This corrects horizontal translation direction and prevents exaggerated offsets in live preview.
+
+### Add: Vision Face Pre-Align (Similarity)
+- Implemented optional face-based similarity pre-warp in `VisionAligner.align` when `enableFacePrealign` is true.
+- Detects largest face in both images via Vision, computes eye centers and eye-line angle, and pre-warps the moving image to match scale/rotation/position before global registration.
+- Currently used in save-time pipeline (preview uses translation-only for responsiveness).
+
+### UI: Move Snap Align Toggle
+- Moved the “Snap Align” toggle below the shutter row; slider restored to its prior position above the bottom controls.

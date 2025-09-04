@@ -13,12 +13,17 @@ final class VisionAligner {
     private let ciContext = CIContext()
     private init() {}
 
-    func align(moving: UIImage, reference: UIImage, targetMP: Double = 1.5, preferHomography: Bool = true) -> VisionAlignmentResult? {
+    func align(moving: UIImage, reference: UIImage, targetMP: Double = 1.5, preferHomography: Bool = true, enableFacePrealign: Bool = true) -> VisionAlignmentResult? {
         let start = CFAbsoluteTimeGetCurrent()
 
         // Normalize orientations and compute shared downscale
         guard let refUp = movingToUp(reference), let movUp = movingToUp(moving) else { return nil }
-        let (refScaled, movScaled, scale) = downscalePair(reference: refUp, moving: movUp, targetMP: targetMP)
+        var (refScaled, movScaled, scale) = downscalePair(reference: refUp, moving: movUp, targetMP: targetMP)
+
+        // Optional face-based similarity pre-align to improve portraits
+        if enableFacePrealign, let pre = similarityPrealign(moving: movScaled, reference: refScaled) {
+            movScaled = pre
+        }
 
         // Try translational first for speed, then homography if requested
         if let obs = runTranslational(moving: movScaled, reference: refScaled), let aligned = applyAffine(observation: obs, moving: movUp, referenceSize: refUp.size, scale: scale) {
@@ -160,5 +165,90 @@ final class VisionAligner {
         let r = H * v
         let w = max(r.z, 1e-6)
         return CGPoint(x: CGFloat(r.x / w), y: CGFloat(r.y / w))
+    }
+
+    // MARK: - Vision Face Similarity Prealign
+    private func similarityPrealign(moving: UIImage, reference: UIImage) -> UIImage? {
+        guard let movCG = moving.cgImage, let refCG = reference.cgImage else { return nil }
+        // Detect faces
+        let movObs = detectLargestFaceObservations(in: movCG)
+        let refObs = detectLargestFaceObservations(in: refCG)
+        guard let m = movObs, let r = refObs else { return nil }
+        // Extract anchors (eyes preferred; fallback to face center+width)
+        guard let mAnc = faceAnchorsTopLeft(from: m, imageSize: moving.size),
+              let rAnc = faceAnchorsTopLeft(from: r, imageSize: reference.size) else { return nil }
+
+        // Compute similarity mapping moving->reference around eye midpoints
+        let mMid = CGPoint(x: (mAnc.leftEye.x + mAnc.rightEye.x)/2, y: (mAnc.leftEye.y + mAnc.rightEye.y)/2)
+        let rMid = CGPoint(x: (rAnc.leftEye.x + rAnc.rightEye.x)/2, y: (rAnc.leftEye.y + rAnc.rightEye.y)/2)
+        let mVec = CGVector(dx: mAnc.rightEye.x - mAnc.leftEye.x, dy: mAnc.rightEye.y - mAnc.leftEye.y)
+        let rVec = CGVector(dx: rAnc.rightEye.x - rAnc.leftEye.x, dy: rAnc.rightEye.y - rAnc.leftEye.y)
+        let mLen = max(hypot(mVec.dx, mVec.dy), 1e-6)
+        let rLen = max(hypot(rVec.dx, rVec.dy), 1e-6)
+        let scale = rLen / mLen
+        let angle = atan2(rVec.dy, rVec.dx) - atan2(mVec.dy, mVec.dx)
+
+        var t = CGAffineTransform.identity
+        t = t.translatedBy(x: rMid.x, y: rMid.y)
+        t = t.rotated(by: angle)
+        t = t.scaledBy(x: scale, y: scale)
+        t = t.translatedBy(x: -mMid.x, y: -mMid.y)
+
+        // Render moving into reference-sized canvas using similarity transform
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = moving.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: reference.size, format: format)
+        let prewarped = renderer.image { ctx in
+            let cg = ctx.cgContext
+            // Core Graphics is top-left; our anchors are top-left already
+            cg.concatenate(t)
+            moving.draw(in: CGRect(origin: .zero, size: moving.size))
+        }
+        return prewarped
+    }
+
+    private func detectLargestFaceObservations(in cgImage: CGImage) -> VNFaceObservation? {
+        let req = VNDetectFaceLandmarksRequest()
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        try? handler.perform([req])
+        guard let faces = req.results as? [VNFaceObservation], !faces.isEmpty else { return nil }
+        return faces.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height })
+    }
+
+    private struct FaceAnchors { let leftEye: CGPoint; let rightEye: CGPoint }
+
+    private func faceAnchorsTopLeft(from obs: VNFaceObservation, imageSize: CGSize) -> FaceAnchors? {
+        // Prefer eye landmarks; fallback to approximate using face box
+        func mapPoint(_ p: CGPoint, in bbox: CGRect) -> CGPoint {
+            // p is normalized in bbox (0..1). bbox is normalized in image, BL origin.
+            let xBL = bbox.origin.x + p.x * bbox.size.width
+            let yBL = bbox.origin.y + p.y * bbox.size.height
+            // Convert to top-left image coords
+            let x = xBL * imageSize.width
+            let y = (1.0 - yBL) * imageSize.height
+            return CGPoint(x: x, y: y)
+        }
+        if let lm = obs.landmarks,
+           let left = lm.leftEye?.normalizedPoints,
+           let right = lm.rightEye?.normalizedPoints,
+           !left.isEmpty, !right.isEmpty {
+            // Average landmark points for centers
+            let l = left.reduce(CGPoint.zero) { CGPoint(x: $0.x + CGFloat($1.x), y: $0.y + CGFloat($1.y)) }
+            let r = right.reduce(CGPoint.zero) { CGPoint(x: $0.x + CGFloat($1.x), y: $0.y + CGFloat($1.y)) }
+            let lAvg = CGPoint(x: l.x / CGFloat(left.count), y: l.y / CGFloat(left.count))
+            let rAvg = CGPoint(x: r.x / CGFloat(right.count), y: r.y / CGFloat(right.count))
+            let bbox = obs.boundingBox
+            return FaceAnchors(leftEye: mapPoint(lAvg, in: bbox), rightEye: mapPoint(rAvg, in: bbox))
+        }
+        // Fallback: approximate eyes horizontally across face center with width proportion
+        let bbox = obs.boundingBox
+        let centerBL = CGPoint(x: bbox.origin.x + bbox.size.width * 0.5, y: bbox.origin.y + bbox.size.height * 0.6)
+        let width = bbox.size.width * imageSize.width
+        let eyeOffset = width * 0.15
+        let centerTL = CGPoint(x: centerBL.x * imageSize.width, y: (1.0 - centerBL.y) * imageSize.height)
+        let left = CGPoint(x: centerTL.x - eyeOffset, y: centerTL.y)
+        let right = CGPoint(x: centerTL.x + eyeOffset, y: centerTL.y)
+        return FaceAnchors(leftEye: left, rightEye: right)
     }
 }

@@ -55,7 +55,7 @@ public final class AlignmentEngine {
     // Stub implementation: returns moving image unmodified and identity transform
     public func align(moving: UIImage, reference: UIImage, options: AlignmentOptions = .init()) -> AlignmentResult {
         if options.useAppleVision {
-            if let res = VisionAligner.shared.align(moving: moving, reference: reference, targetMP: options.downscaleTargetMP, preferHomography: options.preferHomography) {
+            if let res = VisionAligner.shared.align(moving: moving, reference: reference, targetMP: options.downscaleTargetMP, preferHomography: options.preferHomography, enableFacePrealign: options.enableVisionPrealign) {
                 return AlignmentResult(alignedImage: res.alignedImage, transformModel: res.transformModel, metrics: res.metrics)
             }
         }
