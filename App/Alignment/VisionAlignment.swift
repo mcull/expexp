@@ -82,20 +82,24 @@ final class VisionAligner {
     }
 
     private func applyHomography(observation: VNImageHomographicAlignmentObservation, moving: UIImage, referenceSize: CGSize, scale: CGFloat) -> UIImage? {
-        // Convert 3x3 to map the four corners of the moving image to destination points, scaled to full-res
+        // Vision uses a bottom-left origin coordinate system. Core Image also uses a bottom-left origin.
+        // Define corners in bottom-left space and pass transformed corners directly to CIPerspectiveTransform.
         let Hs = observation.warpTransform
         let H = scaleHomography(Hs, by: scale)
-        let corners = [CGPoint(x: 0, y: 0), CGPoint(x: moving.size.width, y: 0), CGPoint(x: moving.size.width, y: moving.size.height), CGPoint(x: 0, y: moving.size.height)]
-        let dst = corners.map { applyHomographyPoint(H, $0) }
+        let w = moving.size.width
+        let h = moving.size.height
+        // Bottom-left coords: TL:(0,h) TR:(w,h) BR:(w,0) BL:(0,0)
+        let cornersBL = [CGPoint(x: 0, y: h), CGPoint(x: w, y: h), CGPoint(x: w, y: 0), CGPoint(x: 0, y: 0)]
+        let dstBL = cornersBL.map { applyHomographyPoint(H, $0) }
 
         guard let ci = CIImage(image: moving) else { return nil }
         let filter = CIFilter(name: "CIPerspectiveTransform")!
         filter.setValue(ci, forKey: kCIInputImageKey)
-        // Core Image expects dest corners in order: topLeft, topRight, bottomRight, bottomLeft
-        filter.setValue(CIVector(cgPoint: dst[0]), forKey: "inputTopLeft")
-        filter.setValue(CIVector(cgPoint: dst[1]), forKey: "inputTopRight")
-        filter.setValue(CIVector(cgPoint: dst[2]), forKey: "inputBottomRight")
-        filter.setValue(CIVector(cgPoint: dst[3]), forKey: "inputBottomLeft")
+        // Input expects: topLeft, topRight, bottomRight, bottomLeft — which correspond to our BL-space ordering.
+        filter.setValue(CIVector(cgPoint: dstBL[0]), forKey: "inputTopLeft")
+        filter.setValue(CIVector(cgPoint: dstBL[1]), forKey: "inputTopRight")
+        filter.setValue(CIVector(cgPoint: dstBL[2]), forKey: "inputBottomRight")
+        filter.setValue(CIVector(cgPoint: dstBL[3]), forKey: "inputBottomLeft")
 
         guard let out = filter.outputImage else { return nil }
         let rect = CGRect(origin: .zero, size: referenceSize)
