@@ -13,7 +13,9 @@ class CameraModel: ObservableObject {
 
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var previewAngleObservation: NSKeyValueObservation?
-    private var captureAngleObservation: NSKeyValueObservation?
+    /// Latest preview rotation angle (degrees). 90 = portrait baseline. Used to rotate the ghost
+    /// overlay so it visually matches the live (horizon-leveled) preview when held in landscape.
+    private var lastPreviewAngle: CGFloat = 90
 
     /// Capture rotation angle locked to the first exposure of the current stack, so every
     /// exposure shares one orientation (portrait or landscape) and blends cleanly. Nil when
@@ -97,20 +99,18 @@ class CameraModel: ObservableObject {
         rotationCoordinator = coordinator
 
         applyPreviewAngle(coordinator.videoRotationAngleForHorizonLevelPreview)
-        // If a stack is in progress, keep its locked orientation; otherwise track the device.
-        await applyCaptureAngle(lockedCaptureAngle ?? coordinator.videoRotationAngleForHorizonLevelCapture)
+        // Drive the photo off the PREVIEW angle so the captured photo matches how the phone is
+        // held (portrait→portrait, landscape→landscape). The "capture" horizon-level angle is
+        // always landscape, which produced landscape photos even in portrait.
+        await applyCaptureAngle(lockedCaptureAngle ?? coordinator.videoRotationAngleForHorizonLevelPreview)
 
         previewAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview,
                                                       options: [.new]) { [weak self] _, change in
             guard let angle = change.newValue else { return }
-            Task { @MainActor in self?.applyPreviewAngle(angle) }
-        }
-        captureAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture,
-                                                      options: [.new]) { [weak self] _, change in
-            guard let angle = change.newValue else { return }
             Task { @MainActor in
                 guard let self else { return }
-                // Don't let device rotation override a stack's locked orientation.
+                self.applyPreviewAngle(angle)
+                // Capture follows the device too, unless a stack has locked its orientation.
                 if self.lockedCaptureAngle == nil {
                     await self.applyCaptureAngle(angle)
                 }
@@ -119,10 +119,13 @@ class CameraModel: ObservableObject {
     }
 
     private func applyPreviewAngle(_ angle: CGFloat) {
-        guard let connection = previewView?.previewLayer.connection else { return }
-        if connection.isVideoRotationAngleSupported(angle) {
+        lastPreviewAngle = angle
+        if let connection = previewView?.previewLayer.connection,
+           connection.isVideoRotationAngleSupported(angle) {
             connection.videoRotationAngle = angle
         }
+        // Re-rotate the ghost overlay to keep matching the (now possibly rotated) live preview.
+        updateGhostPreviewOverlay()
     }
 
     private func applyCaptureAngle(_ angle: CGFloat) async {
@@ -135,7 +138,7 @@ class CameraModel: ObservableObject {
                 // Lock the stack's orientation to the first exposure's physical orientation,
                 // then apply it for every shot so the whole stack stays portrait or landscape.
                 if capturedRawImages.isEmpty {
-                    lockedCaptureAngle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
+                    lockedCaptureAngle = rotationCoordinator?.videoRotationAngleForHorizonLevelPreview
                 }
                 if let angle = lockedCaptureAngle {
                     await applyCaptureAngle(angle)
@@ -268,16 +271,43 @@ class CameraModel: ObservableObject {
     // MARK: - Live Ghost Preview Alignment
 
     private func updateGhostPreviewOverlay() {
-        guard let canvas = previewView?.previewLayer.bounds.size, canvas.width > 0, canvas.height > 0 else {
+        guard let bounds = previewView?.previewLayer.bounds.size, bounds.width > 0, bounds.height > 0 else {
             previewView?.setOverlayImage(nil, opacity: 0)
             return
         }
+        // Degrees the overlay must rotate to match the live preview (which leans on the device).
+        // Portrait baseline is 90; landscape gives ±90, upside-down 180.
+        let delta = lastPreviewAngle - 90
+        let quarterTurned = (Int(delta.rounded()) % 180 + 180) % 180 == 90
+        // Build the composite in the device's display orientation, then rotate it for the
+        // portrait-locked overlay layer so it lines up with the rotated live feed.
+        let canvas = quarterTurned ? CGSize(width: bounds.height, height: bounds.width) : bounds
         let composite = ExposureCompositor.composite(frames: ghostPreviewImages,
                                                      alignments: transforms,
                                                      canvasSize: canvas,
                                                      scale: UIScreen.main.scale,
                                                      exposureAlpha: CGFloat(ghostExposureAlpha))
-        previewView?.setOverlayImage(composite, opacity: CGFloat(1.0 - ghostOpacity))
+        let display = composite.flatMap { rotatedForPreview($0, degrees: delta) }
+        previewView?.setOverlayImage(display, opacity: CGFloat(1.0 - ghostOpacity))
+    }
+
+    /// Rotates an image by a multiple of 90° (for matching the live preview orientation).
+    private func rotatedForPreview(_ image: UIImage, degrees: CGFloat) -> UIImage {
+        let norm = ((Int(degrees.rounded()) % 360) + 360) % 360
+        guard norm != 0 else { return image }
+        let radians = CGFloat(norm) * .pi / 180
+        let swap = (norm == 90 || norm == 270)
+        let newSize = swap ? CGSize(width: image.size.height, height: image.size.width) : image.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: newSize, format: format).image { ctx in
+            let cg = ctx.cgContext
+            cg.translateBy(x: newSize.width / 2, y: newSize.height / 2)
+            cg.rotate(by: radians)
+            image.draw(in: CGRect(x: -image.size.width / 2, y: -image.size.height / 2,
+                                  width: image.size.width, height: image.size.height))
+        }
     }
 
     private func flashAlignmentWarning() {
