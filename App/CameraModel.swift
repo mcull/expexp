@@ -10,6 +10,10 @@ class CameraModel: ObservableObject {
     private let captureService = CaptureService()
     private let photoLibraryService = PhotoLibraryService()
     var previewView: PreviewView?
+
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var previewAngleObservation: NSKeyValueObservation?
+    private var captureAngleObservation: NSKeyValueObservation?
     
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
@@ -58,6 +62,7 @@ class CameraModel: ObservableObject {
                 try await captureService.setUpSession()
                 await captureService.start()
                 isSessionRunning = true
+                await setUpRotationCoordinator()
             } catch {
                 alertMessage = "Failed to set up camera: \(error.localizedDescription)"
                 showAlert = true
@@ -67,7 +72,43 @@ class CameraModel: ObservableObject {
             showAlert = true
         }
     }
-    
+
+    /// Creates a RotationCoordinator for the active camera + preview layer and keeps the
+    /// preview and photo-output rotation angles up to date. Safe to call again after a
+    /// camera switch; it rebuilds the coordinator and observations.
+    func setUpRotationCoordinator() async {
+        guard let previewLayer = previewView?.previewLayer,
+              let device = await captureService.activeDevice else { return }
+
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
+        rotationCoordinator = coordinator
+
+        applyPreviewAngle(coordinator.videoRotationAngleForHorizonLevelPreview)
+        await applyCaptureAngle(coordinator.videoRotationAngleForHorizonLevelCapture)
+
+        previewAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview,
+                                                      options: [.new]) { [weak self] _, change in
+            guard let angle = change.newValue else { return }
+            Task { @MainActor in self?.applyPreviewAngle(angle) }
+        }
+        captureAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture,
+                                                      options: [.new]) { [weak self] _, change in
+            guard let angle = change.newValue else { return }
+            Task { @MainActor in await self?.applyCaptureAngle(angle) }
+        }
+    }
+
+    private func applyPreviewAngle(_ angle: CGFloat) {
+        guard let connection = previewView?.previewLayer.connection else { return }
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
+        }
+    }
+
+    private func applyCaptureAngle(_ angle: CGFloat) async {
+        await captureService.applyCaptureGeometry(rotationAngle: angle)
+    }
+
     func capturePhoto() {
         Task {
             do {
@@ -107,6 +148,7 @@ class CameraModel: ObservableObject {
                 try await captureService.switchCamera()
                 // Refresh overlay mirroring to match new camera connection
                 previewView?.refreshMirroring()
+                await setUpRotationCoordinator()
             } catch {
                 alertMessage = "Failed to switch camera: \(error.localizedDescription)"
                 showAlert = true
