@@ -115,10 +115,27 @@ extension AVCapturePhoto {
     }
 }
 
+extension UIImage.Orientation {
+    /// Maps an EXIF/CGImage orientation to the semantically-equivalent UIImage orientation.
+    init(_ cg: CGImagePropertyOrientation) {
+        switch cg {
+        case .up: self = .up
+        case .upMirrored: self = .upMirrored
+        case .down: self = .down
+        case .downMirrored: self = .downMirrored
+        case .left: self = .left
+        case .leftMirrored: self = .leftMirrored
+        case .right: self = .right
+        case .rightMirrored: self = .rightMirrored
+        @unknown default: self = .up
+        }
+    }
+}
+
 extension UIImage {
     static func fromPixelBuffer(_ pixelBuffer: CVPixelBuffer,
                                 orientation: CGImagePropertyOrientation = .up) -> UIImage {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(orientation)
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         let context = CIContext(options: nil)
 
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
@@ -126,7 +143,22 @@ extension UIImage {
             return UIImage()
         }
 
-        print("📐 ORIENT: applied orientation rawValue=\(orientation.rawValue), result size=\(cgImage.width)x\(cgImage.height)")
-        return UIImage(cgImage: cgImage)
+        // Tag the sensor-native (landscape) image with the intended orientation, then bake
+        // it into upright pixels via UIKit drawing (top-left coords — avoids the CIImage
+        // bottom-left .oriented() inversion). Downstream alignment uses raw .cgImage, so the
+        // pixels themselves must be upright, not just orientation-tagged.
+        let uiOrientation = UIImage.Orientation(orientation)
+        let tagged = UIImage(cgImage: cgImage, scale: 1, orientation: uiOrientation)
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: tagged.size, format: format)
+        let upright = renderer.image { _ in
+            tagged.draw(in: CGRect(origin: .zero, size: tagged.size))
+        }
+
+        print("📐 ORIENT: exif=\(orientation.rawValue) ui=\(uiOrientation.rawValue) baked=\(Int(upright.size.width))x\(Int(upright.size.height))")
+        return upright
     }
 }
