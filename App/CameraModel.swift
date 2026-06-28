@@ -24,8 +24,12 @@ class CameraModel: ObservableObject {
 
     /// Alignment of each captured frame relative to frame 0 (parallel to capturedRawImages).
     private var transforms: [FrameAlignment] = []
-    /// Anchor for alignment. Phase A always uses .scene; Phase B selects by camera.
-    private var currentAnchor: AlignmentAnchor { .scene }
+    /// Active camera position, used to pick the alignment anchor.
+    private var captureCameraPosition: AVCaptureDevice.Position = .back
+    /// Anchor: front camera freezes the face (selfie swirl); back camera freezes the scene.
+    private var currentAnchor: AlignmentAnchor {
+        captureCameraPosition == .front ? .face : .scene
+    }
     /// Briefly true when a just-captured frame could not be aligned (Magic on).
     @Published var showAlignmentWarning: Bool = false
 
@@ -78,6 +82,7 @@ class CameraModel: ObservableObject {
                 await captureService.start()
                 isSessionRunning = true
                 await setUpRotationCoordinator()
+                captureCameraPosition = await captureService.currentCameraPosition
             } catch {
                 alertMessage = "Failed to set up camera: \(error.localizedDescription)"
                 showAlert = true
@@ -181,6 +186,9 @@ class CameraModel: ObservableObject {
                 // Refresh overlay mirroring to match new camera connection
                 previewView?.refreshMirroring()
                 await setUpRotationCoordinator()
+                captureCameraPosition = await captureService.currentCameraPosition
+                recomputeTransforms()
+                updateGhostPreviewOverlay()
             } catch {
                 alertMessage = "Failed to switch camera: \(error.localizedDescription)"
                 showAlert = true
