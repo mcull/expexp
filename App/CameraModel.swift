@@ -13,13 +13,22 @@ class CameraModel: ObservableObject {
 
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var previewAngleObservation: NSKeyValueObservation?
-    private var captureAngleObservation: NSKeyValueObservation?
+    /// Latest preview rotation angle (degrees). 90 = portrait baseline. Used to rotate the ghost
+    /// overlay so it visually matches the live (horizon-leveled) preview when held in landscape.
+    private var lastPreviewAngle: CGFloat = 90
 
     /// Capture rotation angle locked to the first exposure of the current stack, so every
     /// exposure shares one orientation (portrait or landscape) and blends cleanly. Nil when
     /// no stack is in progress; reset on save/clear so the next stack picks a fresh orientation.
     private var lockedCaptureAngle: CGFloat?
-    
+
+    /// Alignment of each captured frame relative to frame 0 (parallel to capturedRawImages).
+    private var transforms: [FrameAlignment] = []
+    /// Anchor for alignment. Phase A always uses .scene; Phase B selects by camera.
+    private var currentAnchor: AlignmentAnchor { .scene }
+    /// Briefly true when a just-captured frame could not be aligned (Magic on).
+    @Published var showAlignmentWarning: Bool = false
+
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
     @Published var capturedPhotos: [AVCapturePhoto] = []
@@ -36,14 +45,18 @@ class CameraModel: ObservableObject {
     /// Keeping this configurable ensures the live preview closely matches the final export.
     @Published var ghostExposureAlpha: Double = 0.8 {
         didSet {
-            // Update preview's exposure alpha and recompose with existing images
-            previewView?.setExposureAlpha(CGFloat(ghostExposureAlpha), currentImages: ghostPreviewImages)
+            updateGhostPreviewOverlay()
         }
     }
     
-    // Save-time alignment flag (Vision). When enabled, align subsequent images to the first capture
-    // using Apple Vision (translation → homography) before blending.
-    @Published var isAlignmentEnabled: Bool = true
+    // Magic alignment toggle. ON aligns subsequent frames to the first via AlignmentService;
+    // OFF stacks frames exactly as shot. Both are WYSIWYG (preview == save).
+    @Published var isAlignmentEnabled: Bool = true {
+        didSet {
+            recomputeTransforms()
+            updateGhostPreviewOverlay()
+        }
+    }
     @Published var showAlert = false
     @Published var alertMessage = ""
     
@@ -86,20 +99,18 @@ class CameraModel: ObservableObject {
         rotationCoordinator = coordinator
 
         applyPreviewAngle(coordinator.videoRotationAngleForHorizonLevelPreview)
-        // If a stack is in progress, keep its locked orientation; otherwise track the device.
-        await applyCaptureAngle(lockedCaptureAngle ?? coordinator.videoRotationAngleForHorizonLevelCapture)
+        // Drive the photo off the PREVIEW angle so the captured photo matches how the phone is
+        // held (portrait→portrait, landscape→landscape). The "capture" horizon-level angle is
+        // always landscape, which produced landscape photos even in portrait.
+        await applyCaptureAngle(lockedCaptureAngle ?? coordinator.videoRotationAngleForHorizonLevelPreview)
 
         previewAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview,
                                                       options: [.new]) { [weak self] _, change in
             guard let angle = change.newValue else { return }
-            Task { @MainActor in self?.applyPreviewAngle(angle) }
-        }
-        captureAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture,
-                                                      options: [.new]) { [weak self] _, change in
-            guard let angle = change.newValue else { return }
             Task { @MainActor in
                 guard let self else { return }
-                // Don't let device rotation override a stack's locked orientation.
+                self.applyPreviewAngle(angle)
+                // Capture follows the device too, unless a stack has locked its orientation.
                 if self.lockedCaptureAngle == nil {
                     await self.applyCaptureAngle(angle)
                 }
@@ -108,10 +119,13 @@ class CameraModel: ObservableObject {
     }
 
     private func applyPreviewAngle(_ angle: CGFloat) {
-        guard let connection = previewView?.previewLayer.connection else { return }
-        if connection.isVideoRotationAngleSupported(angle) {
+        lastPreviewAngle = angle
+        if let connection = previewView?.previewLayer.connection,
+           connection.isVideoRotationAngleSupported(angle) {
             connection.videoRotationAngle = angle
         }
+        // Re-rotate the ghost overlay to keep matching the (now possibly rotated) live preview.
+        updateGhostPreviewOverlay()
     }
 
     private func applyCaptureAngle(_ angle: CGFloat) async {
@@ -124,7 +138,7 @@ class CameraModel: ObservableObject {
                 // Lock the stack's orientation to the first exposure's physical orientation,
                 // then apply it for every shot so the whole stack stays portrait or landscape.
                 if capturedRawImages.isEmpty {
-                    lockedCaptureAngle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
+                    lockedCaptureAngle = rotationCoordinator?.videoRotationAngleForHorizonLevelPreview
                 }
                 if let angle = lockedCaptureAngle {
                     await applyCaptureAngle(angle)
@@ -136,10 +150,19 @@ class CameraModel: ObservableObject {
                 // Store raw image for final processing
                 capturedRawImages.append(image)
                 capturedPhotos.append(photo)
-
-                // Frames are already upright (rotation handled at capture time).
                 ghostPreviewImages.append(image)
-                // Update overlay (optionally with Vision alignment) for live preview
+
+                // Compute this frame's alignment relative to the first (reference) frame.
+                if capturedRawImages.count == 1 {
+                    transforms = [.identity]
+                } else if isAlignmentEnabled, let reference = capturedRawImages.first {
+                    let a = AlignmentService.alignment(moving: image, reference: reference, anchor: currentAnchor)
+                    transforms.append(a)
+                    if !a.locked { flashAlignmentWarning() }
+                } else {
+                    transforms.append(.identity)
+                }
+
                 updateGhostPreviewOverlay()
 
                 print("📷 DEBUG: Total captured images: \(capturedRawImages.count) (raw + \(ghostPreviewImages.count) ghost previews)")
@@ -184,43 +207,23 @@ class CameraModel: ObservableObject {
                 print("🖼️ DEBUG: Starting save process with \(capturedRawImages.count) raw images")
                 print("🖼️ DEBUG: Raw image sizes: \(capturedRawImages.map { $0.size })")
                 
-                // Frames are captured upright; no rotation needed.
-                let processedImages = capturedRawImages
-
-                // Blend multiple images into one if we have more than one
                 let finalImage: UIImage
-                if processedImages.count == 1 {
-                    finalImage = processedImages[0]
+                if capturedRawImages.count == 1 {
+                    finalImage = capturedRawImages[0]
                     print("🖼️ DEBUG: Single upright image saved as-is")
+                } else if let canvas = capturedRawImages.first?.size,
+                          let composite = ExposureCompositor.composite(frames: capturedRawImages,
+                                                                       alignments: transforms,
+                                                                       canvasSize: canvas,
+                                                                       scale: 1,
+                                                                       exposureAlpha: CGFloat(ghostExposureAlpha)) {
+                    finalImage = composite
+                    print("🖼️ DEBUG: Composited \(capturedRawImages.count) frames (aligned: \(isAlignmentEnabled))")
                 } else {
-                    var imagesForBlend = processedImages
-                    if isAlignmentEnabled {
-                        print("🧭 ALIGN: Aligning \(processedImages.count - 1) images to reference using Vision...")
-                        let reference = processedImages[0]
-                        var aligned: [UIImage] = [reference]
-                        for (idx, img) in processedImages.dropFirst().enumerated() {
-                            // Face pre-align is disabled: it warps only the downscaled image used
-                            // to compute the transform, but the final transform is applied to the
-                            // original image, causing front-camera (face) shots to shift sideways.
-                            // Translational alignment alone is what makes the back camera lock in.
-                            // A correct face-aware aligner is deferred to mini-project #4.
-                            let options = AlignmentOptions(preferHomography: true,
-                                                           enableVisionPrealign: false,
-                                                           enableLocalRefine: false,
-                                                           downscaleTargetMP: 1.5,
-                                                           timeBudgetMS: 250,
-                                                           useAppleVision: true)
-                            let res = AlignmentEngine.shared.align(moving: img, reference: reference, options: options)
-                            aligned.append(res.alignedImage)
-                            print("🧭 ALIGN: #\(idx+2) model=\(res.transformModel) runtime=\(res.metrics.runtimeMS)ms")
-                        }
-                        imagesForBlend = aligned
-                    }
-                    print("🖼️ DEBUG: Blending \(imagesForBlend.count) images (aligned: \(isAlignmentEnabled))...")
-                    finalImage = blendImages(imagesForBlend)
-                    print("🖼️ DEBUG: Blend complete")
+                    finalImage = capturedRawImages[0]
+                    print("🖼️ DEBUG: Composite failed; saved first frame")
                 }
-                
+
                 print("🖼️ DEBUG: Final image size: \(finalImage.size)")
                 
                 // Save the final image and capture local identifier for deeplink
@@ -246,8 +249,9 @@ class CameraModel: ObservableObject {
                 capturedRawImages.removeAll()
                 capturedPhotos.removeAll()
                 ghostPreviewImages.removeAll()
+                transforms.removeAll()
                 lockedCaptureAngle = nil  // next stack picks a fresh orientation
-                previewView?.updateGhostImages([], opacity: 0)
+                previewView?.setOverlayImage(nil, opacity: 0)
             } catch {
                 alertMessage = "Failed to save photo: \(error.localizedDescription)"
                 showAlert = true
@@ -259,79 +263,73 @@ class CameraModel: ObservableObject {
         capturedRawImages.removeAll()
         capturedPhotos.removeAll()
         ghostPreviewImages.removeAll()
+        transforms.removeAll()
         lockedCaptureAngle = nil  // next stack picks a fresh orientation
-        previewView?.updateGhostImages([], opacity: 0)
+        previewView?.setOverlayImage(nil, opacity: 0)
     }
 
     // MARK: - Live Ghost Preview Alignment
+
     private func updateGhostPreviewOverlay() {
-        guard let canvasSize = previewView?.previewLayer.bounds.size, canvasSize.width > 0, canvasSize.height > 0 else {
-            // Fallback: draw originals
-            previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+        guard let bounds = previewView?.previewLayer.bounds.size, bounds.width > 0, bounds.height > 0 else {
+            previewView?.setOverlayImage(nil, opacity: 0)
             return
         }
+        // Degrees the overlay must rotate to match the live preview (which leans on the device).
+        // Portrait baseline is 90; landscape gives ±90, upside-down 180.
+        let delta = lastPreviewAngle - 90
+        let quarterTurned = (Int(delta.rounded()) % 180 + 180) % 180 == 90
+        // Build the composite in the device's display orientation, then rotate it for the
+        // portrait-locked overlay layer so it lines up with the rotated live feed.
+        let canvas = quarterTurned ? CGSize(width: bounds.height, height: bounds.width) : bounds
+        let composite = ExposureCompositor.composite(frames: ghostPreviewImages,
+                                                     alignments: transforms,
+                                                     canvasSize: canvas,
+                                                     scale: UIScreen.main.scale,
+                                                     exposureAlpha: CGFloat(ghostExposureAlpha))
+        let display = composite.flatMap { rotatedForPreview($0, degrees: delta) }
+        previewView?.setOverlayImage(display, opacity: CGFloat(1.0 - ghostOpacity))
+    }
 
-        // Scale all ghosts to preview canvas
-        let scaled = ghostPreviewImages.map { scaleImage($0, toAspectFill: canvasSize) }
-
-        guard isAlignmentEnabled else {
-            previewView?.updateGhostImages(scaled, opacity: CGFloat(1.0 - ghostOpacity))
-            return
+    /// Rotates an image by a multiple of 90° (for matching the live preview orientation).
+    private func rotatedForPreview(_ image: UIImage, degrees: CGFloat) -> UIImage {
+        let norm = ((Int(degrees.rounded()) % 360) + 360) % 360
+        guard norm != 0 else { return image }
+        let radians = CGFloat(norm) * .pi / 180
+        let swap = (norm == 90 || norm == 270)
+        let newSize = swap ? CGSize(width: image.size.height, height: image.size.width) : image.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: newSize, format: format).image { ctx in
+            let cg = ctx.cgContext
+            cg.translateBy(x: newSize.width / 2, y: newSize.height / 2)
+            cg.rotate(by: radians)
+            image.draw(in: CGRect(x: -image.size.width / 2, y: -image.size.height / 2,
+                                  width: image.size.width, height: image.size.height))
         }
+    }
 
-        guard let first = scaled.first else {
-            previewView?.updateGhostImages([], opacity: CGFloat(1.0 - ghostOpacity))
-            return
+    private func flashAlignmentWarning() {
+        withAnimation(.easeOut(duration: 0.15)) { showAlignmentWarning = true }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            withAnimation(.easeIn(duration: 0.25)) { self.showAlignmentWarning = false }
         }
+    }
 
-        // Align subsequent images to the first using Vision (translation only) at preview scale
-        var aligned: [UIImage] = [first]
-        for img in scaled.dropFirst() {
-            if let a = translationalAlignPreview(moving: img, reference: first) {
-                aligned.append(a)
+    /// Recomputes all alignments (identity when Magic is off). Used when the toggle changes.
+    private func recomputeTransforms() {
+        guard let reference = capturedRawImages.first else { transforms = []; return }
+        var result: [FrameAlignment] = [.identity]
+        for img in capturedRawImages.dropFirst() {
+            if isAlignmentEnabled {
+                result.append(AlignmentService.alignment(moving: img, reference: reference, anchor: currentAnchor))
             } else {
-                aligned.append(img)
+                result.append(.identity)
             }
         }
-        previewView?.updateGhostImages(aligned, opacity: CGFloat(1.0 - ghostOpacity))
-    }
-
-    private func scaleImage(_ image: UIImage, toAspectFill canvasSize: CGSize) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = UIScreen.main.scale
-        format.opaque = false
-        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
-        return renderer.image { ctx in
-            let imgSize = image.size
-            let s = max(canvasSize.width / imgSize.width, canvasSize.height / imgSize.height)
-            let w = imgSize.width * s
-            let h = imgSize.height * s
-            let x = (canvasSize.width - w) / 2
-            let y = (canvasSize.height - h) / 2
-            image.draw(in: CGRect(x: x, y: y, width: w, height: h))
-        }
-    }
-
-    // Use Vision translational registration for fast, robust preview alignment in top-left coords
-    private func translationalAlignPreview(moving: UIImage, reference: UIImage) -> UIImage? {
-        guard let refCG = reference.cgImage, let movCG = moving.cgImage else { return nil }
-        let req = VNTranslationalImageRegistrationRequest(targetedCGImage: movCG, options: [:])
-        let handler = VNImageRequestHandler(cgImage: refCG, options: [:])
-        do { try handler.perform([req]) } catch { return nil }
-        guard let obs = req.results?.first as? VNImageTranslationAlignmentObservation else { return nil }
-        let t = obs.alignmentTransform
-        // Convert Vision bottom-left translation to top-left: (tx, -ty)
-        let tx = t.tx
-        let ty = -t.ty
-        let size = reference.size
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = UIScreen.main.scale
-        format.opaque = false
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        return renderer.image { ctx in
-            // Draw moving shifted by (tx, ty) in top-left coordinates
-            moving.draw(in: CGRect(origin: CGPoint(x: tx, y: ty), size: moving.size))
-        }
+        transforms = result
     }
 
     private func makeThumbnail(from image: UIImage, maxSide: CGFloat) -> UIImage? {
@@ -352,26 +350,6 @@ class CameraModel: ObservableObject {
         UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
     
-    private func blendImages(_ images: [UIImage]) -> UIImage {
-        guard let first = images.first else { return UIImage() }
-        guard images.count > 1 else { return first }
-
-        let canvasSize = first.size
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = first.scale
-        format.opaque = false
-        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
-        let drawRect = CGRect(origin: .zero, size: canvasSize)
-
-        return renderer.image { ctx in
-            ctx.cgContext.clear(drawRect)
-            // Lighten blend with per-exposure alpha, matching the live preview compositor.
-            // UIImage.draw handles image orientation correctly (no manual rotation needed).
-            for image in images {
-                image.draw(in: drawRect, blendMode: .lighten, alpha: CGFloat(ghostExposureAlpha))
-            }
-        }
-    }
 }
 
 extension UIImage.Orientation {

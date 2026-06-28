@@ -11,6 +11,24 @@ struct ContentView: View {
                 }
                 .ignoresSafeArea()
 
+                if cameraModel.showAlignmentWarning {
+                    VStack {
+                        Spacer().frame(height: 60)
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text("Couldn't lock — hold steadier")
+                                .font(.footnote.weight(.semibold))
+                        }
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(Color.yellow.opacity(0.95)))
+                        Spacer()
+                    }
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+                }
+
                 VStack {
                     Spacer()
                     
