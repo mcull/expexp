@@ -48,11 +48,17 @@ everything else ghost":
 
 ## Non-goals
 
+- **Digital subject-isolation / segmentation cut-outs** (e.g. `VNGeneratePersonSegmentation`,
+  subject lifting). Intentionally avoided: the desired aesthetic is a **film double-exposure with
+  good jitter control**, not a clean digital cut-out. Real frame stacking + lighten blend *is* the
+  film look; we only want the stacking to be steady.
 - Affine/homography correction of camera *tilt* in scene mode. Translational only; tilt remains
-  as natural ghosting. (Affine scene-mode is a possible later add-on.)
+  as natural ghosting. (Affine scene-mode is the one plausible later add-on.)
 - A manual scene/face mode picker. Anchor is chosen by camera; a manual override can be added in
   the UI mini-project if wanted.
-- Optical-flow local refinement.
+- Optical-flow / local-warp refinement (works against the ghost aesthetic; not wanted).
+- A *live* viewfinder lock meter (continuous registration of the video feed). Deferred to the UI
+  mini-project; this mini-project only exposes the per-capture signal it needs.
 
 ## Design
 
@@ -99,6 +105,26 @@ toggle's effect is always visible before saving.
   frame (leave it as shot) rather than guessing. If the computed similarity scale is wildly out of
   range (e.g. <0.3× or >3×), also fall back to identity.
 
+### Robustness: locking onto static structure, not moving objects
+
+The main scene-mode failure to defend against is locking onto moving traffic instead of the static
+buildings. Defenses (no segmentation needed):
+- **Dominant-majority physics:** Vision's translational registration is driven by the large,
+  edge-rich, consistent content (buildings). Moving cars are smaller, motion-blurred, and
+  inconsistent frame-to-frame — weak signal that does not dominate.
+- **Jitter-scale expectation + guard:** handheld jitter between quick successive shots is small,
+  so a correct lock is a *small* shift. A mis-lock onto a moving object would demand a large shift,
+  which the ~30% guard rejects (frame left as shot). The guard threshold is tunable on-device.
+
+### Alignment feedback (confidence + minimal indicator)
+
+`AlignmentService` returns, alongside the transform, whether the frame **locked** or **fell back**
+to identity (registration failed or guard tripped) — a signal it must compute anyway. `CameraModel`
+publishes the last capture's lock status. A **minimal post-capture indicator** surfaces it: when a
+just-captured frame could not be locked, give brief feedback (e.g. the Magic wand flashes / a short
+"couldn't lock — hold steadier" cue). This is cheap and doubles as live confirmation the guard
+works. The richer *live* viewfinder lock meter is deferred to the UI mini-project (see Non-goals).
+
 ### Data flow
 - `CameraModel` keeps a `transforms: [CGAffineTransform]` array parallel to the captured frames;
   index 0 (the reference) is always identity.
@@ -114,7 +140,10 @@ toggle's effect is always visible before saving.
 - Create `App/Alignment/AlignmentService.swift` — anchor-based transform computation + guards.
 - Create `App/Alignment/ExposureCompositor.swift` — the single lighten-blend compositor.
 - `App/CameraModel.swift` — store/compute `transforms`; route preview + save through the
-  compositor; remove `translationalAlignPreview`, `scaleImage`, and the inline blend.
+  compositor; publish the last capture's lock status; remove `translationalAlignPreview`,
+  `scaleImage`, and the inline blend.
+- `App/ContentView.swift` — minimal post-capture "couldn't lock" indicator driven by the
+  published lock status.
 - `App/CameraPreview.swift` (`PreviewView`) — drop `composeLightenComposite`/`aspectFillRect`;
   display the composite handed to it; keep the opacity fast-path.
 - `App/Alignment/AlignmentEngine.swift` + `App/Alignment/VisionAlignment.swift` — collapse into
@@ -139,7 +168,8 @@ Each phase verified on a physical iPhone; Simulator build must compile first.
 Phase A:
 1. **Magic OFF, both cameras:** hand-composed stack saves exactly as framed (preview = save).
 2. **Magic ON, static cityscape/handheld:** background crisp, jitter removed; preview = save.
-3. **Magic ON, reflective/large-move scene:** no wild slide — guard leaves frames as shot.
+3. **Magic ON, reflective/large-move scene:** no wild slide — guard leaves frames as shot, and the
+   "couldn't lock" indicator fires.
 4. Portrait and landscape stacks both behave.
 
 Phase B:
