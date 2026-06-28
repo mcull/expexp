@@ -3,12 +3,22 @@ import AVFoundation
 import Photos
 import UIKit
 import CoreImage
+import Vision
 
 @MainActor
 class CameraModel: ObservableObject {
     private let captureService = CaptureService()
     private let photoLibraryService = PhotoLibraryService()
     var previewView: PreviewView?
+
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var previewAngleObservation: NSKeyValueObservation?
+    private var captureAngleObservation: NSKeyValueObservation?
+
+    /// Capture rotation angle locked to the first exposure of the current stack, so every
+    /// exposure shares one orientation (portrait or landscape) and blends cleanly. Nil when
+    /// no stack is in progress; reset on save/clear so the next stack picks a fresh orientation.
+    private var lockedCaptureAngle: CGFloat?
     
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
@@ -30,6 +40,10 @@ class CameraModel: ObservableObject {
             previewView?.setExposureAlpha(CGFloat(ghostExposureAlpha), currentImages: ghostPreviewImages)
         }
     }
+    
+    // Save-time alignment flag (Vision). When enabled, align subsequent images to the first capture
+    // using Apple Vision (translation → homography) before blending.
+    @Published var isAlignmentEnabled: Bool = true
     @Published var showAlert = false
     @Published var alertMessage = ""
     
@@ -37,9 +51,6 @@ class CameraModel: ObservableObject {
     @Published var recentSavedThumbnail: UIImage?
     @Published var showSavedThumbnail: Bool = false
     private var recentSavedLocalIdentifier: String?
-    
-    private var captureOrientation: UIDeviceOrientation = .portrait
-    private var captureCamera: AVCaptureDevice.Position = .back
     
     var previewSource: PreviewSource {
         captureService
@@ -53,6 +64,7 @@ class CameraModel: ObservableObject {
                 try await captureService.setUpSession()
                 await captureService.start()
                 isSessionRunning = true
+                await setUpRotationCoordinator()
             } catch {
                 alertMessage = "Failed to set up camera: \(error.localizedDescription)"
                 showAlert = true
@@ -62,33 +74,76 @@ class CameraModel: ObservableObject {
             showAlert = true
         }
     }
-    
+
+    /// Creates a RotationCoordinator for the active camera + preview layer and keeps the
+    /// preview and photo-output rotation angles up to date. Safe to call again after a
+    /// camera switch; it rebuilds the coordinator and observations.
+    func setUpRotationCoordinator() async {
+        guard let previewLayer = previewView?.previewLayer,
+              let device = await captureService.activeDevice else { return }
+
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
+        rotationCoordinator = coordinator
+
+        applyPreviewAngle(coordinator.videoRotationAngleForHorizonLevelPreview)
+        // If a stack is in progress, keep its locked orientation; otherwise track the device.
+        await applyCaptureAngle(lockedCaptureAngle ?? coordinator.videoRotationAngleForHorizonLevelCapture)
+
+        previewAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview,
+                                                      options: [.new]) { [weak self] _, change in
+            guard let angle = change.newValue else { return }
+            Task { @MainActor in self?.applyPreviewAngle(angle) }
+        }
+        captureAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture,
+                                                      options: [.new]) { [weak self] _, change in
+            guard let angle = change.newValue else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                // Don't let device rotation override a stack's locked orientation.
+                if self.lockedCaptureAngle == nil {
+                    await self.applyCaptureAngle(angle)
+                }
+            }
+        }
+    }
+
+    private func applyPreviewAngle(_ angle: CGFloat) {
+        guard let connection = previewView?.previewLayer.connection else { return }
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
+        }
+    }
+
+    private func applyCaptureAngle(_ angle: CGFloat) async {
+        await captureService.applyCaptureGeometry(rotationAngle: angle)
+    }
+
     func capturePhoto() {
         Task {
             do {
-                // Only capture orientation and camera position for the first image
+                // Lock the stack's orientation to the first exposure's physical orientation,
+                // then apply it for every shot so the whole stack stays portrait or landscape.
                 if capturedRawImages.isEmpty {
-                    captureOrientation = UIDevice.current.orientation
-                    captureCamera = await captureService.currentCameraPosition
-                    print("📷 DEBUG: First capture - orientation: \(captureOrientation), camera: \(captureCamera)")
+                    lockedCaptureAngle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
                 }
-                
+                if let angle = lockedCaptureAngle {
+                    await applyCaptureAngle(angle)
+                }
+
                 let (image, photo) = try await captureService.capturePhotoWithRawData()
                 print("📷 DEBUG: Captured raw image with size: \(image.size), orientation: \(image.imageOrientation.displayName)")
-                
+
                 // Store raw image for final processing
                 capturedRawImages.append(image)
                 capturedPhotos.append(photo)
-                
-                // Rotate ghost to match camera preview orientation  
-                let rotatedGhost = rotateImageClockwise(image)
-                ghostPreviewImages.append(rotatedGhost)
-                // Update overlay within the preview layer to ensure perfect alignment
-                previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
-                print("📷 DEBUG: Ghost image size: \(rotatedGhost.size), scale: \(rotatedGhost.scale) (rotated to match preview)")
-                
+
+                // Frames are already upright (rotation handled at capture time).
+                ghostPreviewImages.append(image)
+                // Update overlay (optionally with Vision alignment) for live preview
+                updateGhostPreviewOverlay()
+
                 print("📷 DEBUG: Total captured images: \(capturedRawImages.count) (raw + \(ghostPreviewImages.count) ghost previews)")
-                
+
             } catch {
                 alertMessage = "Failed to capture photo: \(error.localizedDescription)"
                 showAlert = true
@@ -102,6 +157,7 @@ class CameraModel: ObservableObject {
                 try await captureService.switchCamera()
                 // Refresh overlay mirroring to match new camera connection
                 previewView?.refreshMirroring()
+                await setUpRotationCoordinator()
             } catch {
                 alertMessage = "Failed to switch camera: \(error.localizedDescription)"
                 showAlert = true
@@ -128,33 +184,40 @@ class CameraModel: ObservableObject {
                 print("🖼️ DEBUG: Starting save process with \(capturedRawImages.count) raw images")
                 print("🖼️ DEBUG: Raw image sizes: \(capturedRawImages.map { $0.size })")
                 
-                // Process raw images (apply rotation) at save time for speed
-                print("🖼️ DEBUG: Processing raw images with orientation/rotation...")
-                var processedImages: [UIImage] = []
-                
-                for (index, rawImage) in capturedRawImages.enumerated() {
-                    let shouldRotate = shouldRotateImage(rawImage, for: captureOrientation, cameraPosition: captureCamera)
-                    let processedImage = shouldRotate ? rotateImage(rawImage, for: captureOrientation, cameraPosition: captureCamera) : rawImage
-                    processedImages.append(processedImage)
-                    print("🖼️ DEBUG: Processed image \(index + 1), rotated: \(shouldRotate)")
-                }
-                
+                // Frames are captured upright; no rotation needed.
+                let processedImages = capturedRawImages
+
                 // Blend multiple images into one if we have more than one
                 let finalImage: UIImage
                 if processedImages.count == 1 {
-                    // Align behavior with multi-exposure path: apply the same 90° clockwise
-                    // correction so single-portrait captures are not saved rotated CCW.
-                    if let cg = processedImages[0].cgImage {
-                        let rotated = rotateCGImageClockwise(cg)
-                        finalImage = UIImage(cgImage: rotated, scale: processedImages[0].scale, orientation: .up)
-                        print("🖼️ DEBUG: Single image rotated 90° clockwise for consistent orientation")
-                    } else {
-                        finalImage = processedImages[0]
-                        print("🖼️ DEBUG: Single image used as-is (no CGImage)")
-                    }
+                    finalImage = processedImages[0]
+                    print("🖼️ DEBUG: Single upright image saved as-is")
                 } else {
-                    print("🖼️ DEBUG: Blending \(processedImages.count) processed images...")
-                    finalImage = blendImages(processedImages)
+                    var imagesForBlend = processedImages
+                    if isAlignmentEnabled {
+                        print("🧭 ALIGN: Aligning \(processedImages.count - 1) images to reference using Vision...")
+                        let reference = processedImages[0]
+                        var aligned: [UIImage] = [reference]
+                        for (idx, img) in processedImages.dropFirst().enumerated() {
+                            // Face pre-align is disabled: it warps only the downscaled image used
+                            // to compute the transform, but the final transform is applied to the
+                            // original image, causing front-camera (face) shots to shift sideways.
+                            // Translational alignment alone is what makes the back camera lock in.
+                            // A correct face-aware aligner is deferred to mini-project #4.
+                            let options = AlignmentOptions(preferHomography: true,
+                                                           enableVisionPrealign: false,
+                                                           enableLocalRefine: false,
+                                                           downscaleTargetMP: 1.5,
+                                                           timeBudgetMS: 250,
+                                                           useAppleVision: true)
+                            let res = AlignmentEngine.shared.align(moving: img, reference: reference, options: options)
+                            aligned.append(res.alignedImage)
+                            print("🧭 ALIGN: #\(idx+2) model=\(res.transformModel) runtime=\(res.metrics.runtimeMS)ms")
+                        }
+                        imagesForBlend = aligned
+                    }
+                    print("🖼️ DEBUG: Blending \(imagesForBlend.count) images (aligned: \(isAlignmentEnabled))...")
+                    finalImage = blendImages(imagesForBlend)
                     print("🖼️ DEBUG: Blend complete")
                 }
                 
@@ -183,6 +246,7 @@ class CameraModel: ObservableObject {
                 capturedRawImages.removeAll()
                 capturedPhotos.removeAll()
                 ghostPreviewImages.removeAll()
+                lockedCaptureAngle = nil  // next stack picks a fresh orientation
                 previewView?.updateGhostImages([], opacity: 0)
             } catch {
                 alertMessage = "Failed to save photo: \(error.localizedDescription)"
@@ -195,7 +259,79 @@ class CameraModel: ObservableObject {
         capturedRawImages.removeAll()
         capturedPhotos.removeAll()
         ghostPreviewImages.removeAll()
+        lockedCaptureAngle = nil  // next stack picks a fresh orientation
         previewView?.updateGhostImages([], opacity: 0)
+    }
+
+    // MARK: - Live Ghost Preview Alignment
+    private func updateGhostPreviewOverlay() {
+        guard let canvasSize = previewView?.previewLayer.bounds.size, canvasSize.width > 0, canvasSize.height > 0 else {
+            // Fallback: draw originals
+            previewView?.updateGhostImages(ghostPreviewImages, opacity: CGFloat(1.0 - ghostOpacity))
+            return
+        }
+
+        // Scale all ghosts to preview canvas
+        let scaled = ghostPreviewImages.map { scaleImage($0, toAspectFill: canvasSize) }
+
+        guard isAlignmentEnabled else {
+            previewView?.updateGhostImages(scaled, opacity: CGFloat(1.0 - ghostOpacity))
+            return
+        }
+
+        guard let first = scaled.first else {
+            previewView?.updateGhostImages([], opacity: CGFloat(1.0 - ghostOpacity))
+            return
+        }
+
+        // Align subsequent images to the first using Vision (translation only) at preview scale
+        var aligned: [UIImage] = [first]
+        for img in scaled.dropFirst() {
+            if let a = translationalAlignPreview(moving: img, reference: first) {
+                aligned.append(a)
+            } else {
+                aligned.append(img)
+            }
+        }
+        previewView?.updateGhostImages(aligned, opacity: CGFloat(1.0 - ghostOpacity))
+    }
+
+    private func scaleImage(_ image: UIImage, toAspectFill canvasSize: CGSize) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = UIScreen.main.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
+        return renderer.image { ctx in
+            let imgSize = image.size
+            let s = max(canvasSize.width / imgSize.width, canvasSize.height / imgSize.height)
+            let w = imgSize.width * s
+            let h = imgSize.height * s
+            let x = (canvasSize.width - w) / 2
+            let y = (canvasSize.height - h) / 2
+            image.draw(in: CGRect(x: x, y: y, width: w, height: h))
+        }
+    }
+
+    // Use Vision translational registration for fast, robust preview alignment in top-left coords
+    private func translationalAlignPreview(moving: UIImage, reference: UIImage) -> UIImage? {
+        guard let refCG = reference.cgImage, let movCG = moving.cgImage else { return nil }
+        let req = VNTranslationalImageRegistrationRequest(targetedCGImage: movCG, options: [:])
+        let handler = VNImageRequestHandler(cgImage: refCG, options: [:])
+        do { try handler.perform([req]) } catch { return nil }
+        guard let obs = req.results?.first as? VNImageTranslationAlignmentObservation else { return nil }
+        let t = obs.alignmentTransform
+        // Convert Vision bottom-left translation to top-left: (tx, -ty)
+        let tx = t.tx
+        let ty = -t.ty
+        let size = reference.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = UIScreen.main.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { ctx in
+            // Draw moving shifted by (tx, ty) in top-left coordinates
+            moving.draw(in: CGRect(origin: CGPoint(x: tx, y: ty), size: moving.size))
+        }
     }
 
     private func makeThumbnail(from image: UIImage, maxSide: CGFloat) -> UIImage? {
@@ -217,212 +353,24 @@ class CameraModel: ObservableObject {
     }
     
     private func blendImages(_ images: [UIImage]) -> UIImage {
-        print("🎨 DEBUG: Starting blend with \(images.count) images")
-        
-        guard let firstImage = images.first, images.count > 1 else {
-            print("🎨 DEBUG: Single image, no blending needed")
-            return images.first ?? UIImage()
-        }
-        
-        print("🎨 DEBUG: Blending multiple images using screen blend mode")
-        
-        // Use the first image as the base canvas
-        let canvasSize = firstImage.size
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
-        
-        guard let context = CGContext(data: nil,
-                                    width: Int(canvasSize.width),
-                                    height: Int(canvasSize.height),
-                                    bitsPerComponent: 8,
-                                    bytesPerRow: 0,
-                                    space: colorSpace,
-                                    bitmapInfo: bitmapInfo) else {
-            print("🎨 DEBUG: Failed to create CGContext")
-            return firstImage
-        }
-        
-        // Start with transparent background for ghostly layering
-        context.clear(CGRect(origin: .zero, size: canvasSize))
-        
+        guard let first = images.first else { return UIImage() }
+        guard images.count > 1 else { return first }
+
+        let canvasSize = first.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = first.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
         let drawRect = CGRect(origin: .zero, size: canvasSize)
-        
-        // Option 1: Lighten blend mode - keeps saturation, creates ghostly overlaps
-        // This brightens where images overlap while preserving colors
-        for (index, image) in images.enumerated() {
-            guard let cgImage = image.cgImage else {
-                print("🎨 DEBUG: Failed to get CGImage from image \(index)")
-                continue
+
+        return renderer.image { ctx in
+            ctx.cgContext.clear(drawRect)
+            // Lighten blend with per-exposure alpha, matching the live preview compositor.
+            // UIImage.draw handles image orientation correctly (no manual rotation needed).
+            for image in images {
+                image.draw(in: drawRect, blendMode: .lighten, alpha: CGFloat(ghostExposureAlpha))
             }
-            
-            // Use lighten blend mode for ghostly effect with full saturation
-            context.setBlendMode(.lighten)
-            // Slight transparency per exposure; configurable to match preview
-            context.setAlpha(CGFloat(ghostExposureAlpha))
-            context.draw(cgImage, in: drawRect)
-            print("🎨 DEBUG: Drew image \(index + 1) with lighten blend mode, alpha: \(ghostExposureAlpha)")
         }
-        
-        guard let blendedCGImage = context.makeImage() else {
-            print("🎨 DEBUG: Failed to create final blended CGImage")
-            return firstImage
-        }
-        
-        // Apply 90° clockwise rotation to fix the counterclockwise rotation issue
-        let rotatedCGImage = rotateCGImageClockwise(blendedCGImage)
-        let blendedImage = UIImage(cgImage: rotatedCGImage, scale: firstImage.scale, orientation: .up)
-        print("🎨 DEBUG: Created blended image with \(images.count) exposures, applied 90° clockwise rotation")
-        return blendedImage
-    }
-    
-    private func rotateCGImageClockwise(_ cgImage: CGImage) -> CGImage {
-        let width = cgImage.width
-        let height = cgImage.height
-        
-        // Create rotated context (swap width/height for 90° rotation)
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
-        
-        guard let context = CGContext(data: nil,
-                                    width: height,  // swapped
-                                    height: width,  // swapped
-                                    bitsPerComponent: 8,
-                                    bytesPerRow: 0,
-                                    space: colorSpace,
-                                    bitmapInfo: bitmapInfo) else {
-            print("🎨 DEBUG: Failed to create rotation context")
-            return cgImage
-        }
-        
-        // Apply 90° counterclockwise rotation transform
-        context.translateBy(x: 0, y: CGFloat(width))
-        context.rotate(by: -.pi / 2)  // 90° counterclockwise
-        
-        // Draw the original image in the rotated context
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        
-        guard let rotatedImage = context.makeImage() else {
-            print("🎨 DEBUG: Failed to create rotated image")
-            return cgImage
-        }
-        
-        print("🎨 DEBUG: Applied 90° clockwise rotation: \(width)x\(height) -> \(height)x\(width)")
-        return rotatedImage
-    }
-    
-    private func shouldRotateImage(_ image: UIImage, for orientation: UIDeviceOrientation, cameraPosition: AVCaptureDevice.Position) -> Bool {
-        print("📷 DEBUG: Checking rotation need - Device: \(orientation.rawValue), Image: \(image.imageOrientation.displayName)")
-        
-        // For portrait device orientation, camera typically provides .right orientation images
-        // In this case, we don't need to rotate since the image is already correct for display
-        if orientation == .portrait && image.imageOrientation == .right {
-            print("📷 DEBUG: Portrait device + Right image orientation = No rotation needed")
-            return false
-        }
-        
-        // If device is portrait and image is already .up, also no rotation needed
-        if orientation == .portrait && image.imageOrientation == .up {
-            print("📷 DEBUG: Portrait device + Up image orientation = No rotation needed") 
-            return false
-        }
-        
-        // For all other combinations, apply rotation
-        print("📷 DEBUG: Will apply rotation for device \(orientation.rawValue) + image \(image.imageOrientation.displayName)")
-        return true
-    }
-    
-    private func rotateImage(_ image: UIImage, for orientation: UIDeviceOrientation, cameraPosition: AVCaptureDevice.Position) -> UIImage {
-        
-        // Get the rotation angle based on device orientation and camera position
-        let rotationAngle: CGFloat
-        
-        switch orientation {
-        case .portrait:
-            rotationAngle = 0 // No rotation needed
-        case .portraitUpsideDown:
-            rotationAngle = .pi // 180 degrees
-        case .landscapeLeft:
-            // For front camera, swap left and right rotations due to mirror effect
-            if cameraPosition == .front {
-                rotationAngle = .pi / 2 // Use right rotation for left tilt
-            } else {
-                rotationAngle = -.pi / 2 // Standard left rotation for rear camera
-            }
-        case .landscapeRight:
-            // For front camera, swap left and right rotations due to mirror effect
-            if cameraPosition == .front {
-                rotationAngle = -.pi / 2 // Use left rotation for right tilt
-            } else {
-                rotationAngle = .pi / 2 // Standard right rotation for rear camera
-            }
-        default:
-            // For unknown, faceUp, faceDown orientations, don't rotate
-            rotationAngle = 0
-        }
-        
-        // If no rotation needed, return original image
-        guard rotationAngle != 0 else { return image }
-        
-        // Create a new image context with rotated image
-        let size = image.size
-        let rotatedSize: CGSize
-        
-        // For 90-degree rotations, swap width and height
-        if abs(rotationAngle) == .pi / 2 {
-            rotatedSize = CGSize(width: size.height, height: size.width)
-        } else {
-            rotatedSize = size
-        }
-        
-        UIGraphicsBeginImageContextWithOptions(rotatedSize, false, image.scale)
-        defer { UIGraphicsEndImageContext() }
-        
-        guard let context = UIGraphicsGetCurrentContext() else { return image }
-        
-        // Move to center of the new image
-        context.translateBy(x: rotatedSize.width / 2, y: rotatedSize.height / 2)
-        
-        // Rotate the context
-        context.rotate(by: rotationAngle)
-        
-        // Draw the image (centered on the rotated context)
-        image.draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
-        
-        return UIGraphicsGetImageFromCurrentImageContext() ?? image
-    }
-    
-    private func rotateImageClockwise(_ image: UIImage) -> UIImage {
-        guard let cgImage = image.cgImage else { return image }
-        
-        let width = cgImage.width
-        let height = cgImage.height
-        
-        // Create rotated context (swap width/height for 90° rotation)
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
-        
-        guard let context = CGContext(data: nil,
-                                    width: height,  // swapped
-                                    height: width,  // swapped
-                                    bitsPerComponent: 8,
-                                    bytesPerRow: 0,
-                                    space: colorSpace,
-                                    bitmapInfo: bitmapInfo) else {
-            return image
-        }
-        
-        // Apply 90° counterclockwise rotation transform
-        context.translateBy(x: 0, y: CGFloat(width))
-        context.rotate(by: -.pi / 2)  // 90° counterclockwise
-        
-        // Draw the original image in the rotated context
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        
-        guard let rotatedCGImage = context.makeImage() else {
-            return image
-        }
-        
-        return UIImage(cgImage: rotatedCGImage, scale: image.scale, orientation: .up)
     }
 }
 

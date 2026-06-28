@@ -10,7 +10,7 @@ struct ContentView: View {
                     cameraModel.focusAt(point: focusPoint)
                 }
                 .ignoresSafeArea()
-                
+
                 VStack {
                     Spacer()
                     
@@ -19,20 +19,18 @@ struct ContentView: View {
                     // The ghost composite uses lighten blend with a configurable per-exposure alpha
                     // to emulate save-time blending as closely as possible.
                     if !cameraModel.ghostPreviewImages.isEmpty {
-                        VStack(spacing: 10) {
-                            HStack(spacing: 15) {
-                                Image(systemName: "square.stack")
-                                    .font(.title3)
-                                    .foregroundColor(.white)
-                                
-                                Slider(value: $cameraModel.ghostOpacity, in: 0...1)
-                                    .accentColor(.white)
-                                    .frame(width: 260)
-                                
-                                Image(systemName: "camera")
-                                    .font(.title3)
-                                    .foregroundColor(.white)
-                            }
+                        HStack(spacing: 15) {
+                            Image(systemName: "square.stack")
+                                .font(.title3)
+                                .foregroundColor(.white)
+                            
+                            Slider(value: $cameraModel.ghostOpacity, in: 0...1)
+                                .accentColor(.white)
+                                .frame(width: 260)
+                            
+                            Image(systemName: "camera")
+                                .font(.title3)
+                                .foregroundColor(.white)
                         }
                         .padding(.bottom, 20)
                     }
@@ -125,7 +123,17 @@ struct ContentView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 28)
-                    .padding(.bottom, 50)
+                    .padding(.bottom, 30)
+
+                    // Snap Align toggle placed below the shutter row
+                    HStack(spacing: 8) {
+                        Image(systemName: "wand.and.stars")
+                            .foregroundColor(cameraModel.isAlignmentEnabled ? .yellow : .gray)
+                        Toggle("Snap Align", isOn: $cameraModel.isAlignmentEnabled)
+                            .labelsHidden()
+                            .tint(.yellow)
+                    }
+                    .padding(.bottom, 20)
                 }
             } else {
                 VStack(spacing: 20) {

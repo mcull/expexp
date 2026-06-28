@@ -189,14 +189,12 @@ class PreviewView: UIView, PreviewTarget {
         let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
         let img = renderer.image { ctx in
             ctx.cgContext.clear(CGRect(origin: .zero, size: canvasSize))
-            // Draw each image aspect-fill into the canvas
+            // Draw each image aspect-fill into the canvas. Use UIImage.draw (not
+            // cgContext.draw(cgImage), which renders flipped in a UIKit top-left context)
+            // so the composite is upright and matches the save-time blend.
             for image in images {
-                guard let cg = image.cgImage else { continue }
-                ctx.cgContext.setBlendMode(.lighten)
-                // Use configurable per-exposure alpha so preview matches save-time blend
-                ctx.cgContext.setAlpha(ghostExposureAlpha)
-                let drawRect = aspectFillRect(forImageSize: CGSize(width: cg.width, height: cg.height), inCanvas: canvasSize)
-                ctx.cgContext.draw(cg, in: drawRect)
+                let drawRect = aspectFillRect(forImageSize: image.size, inCanvas: canvasSize)
+                image.draw(in: drawRect, blendMode: .lighten, alpha: ghostExposureAlpha)
             }
         }
         return img
@@ -214,10 +212,10 @@ class PreviewView: UIView, PreviewTarget {
     // Apply vertical flip always to match preview's coordinate system, and
     // horizontal flip when the preview connection is mirrored (front camera).
     private func applyCompositeTransform() {
-        let isMirrored = previewLayer.connection?.isVideoMirrored ?? false
-        let sx: CGFloat = isMirrored ? -1 : 1
-        let sy: CGFloat = -1
-        ghostCompositeLayer.setAffineTransform(CGAffineTransform(scaleX: sx, y: sy))
+        // Frames are captured upright and front-camera frames are mirrored to match the
+        // preview, so the ghost composite needs no extra flip. Kept as the single tuning
+        // point for overlay orientation.
+        ghostCompositeLayer.setAffineTransform(.identity)
     }
 
     // Public hook to refresh mirroring when camera changes
@@ -274,6 +272,10 @@ struct CameraPreviewWithModel: UIViewRepresentable {
         cameraModel.previewView = preview  // Store reference
         // Initialize preview's per-exposure alpha to match model setting
         preview.ghostExposureAlpha = CGFloat(cameraModel.ghostExposureAlpha)
+        // Now that the preview layer exists, (re)build the RotationCoordinator. The call in
+        // initialize() can run before this view is created, so the coordinator would otherwise
+        // never apply its angles or front-camera mirroring.
+        Task { await cameraModel.setUpRotationCoordinator() }
         return preview
     }
     
