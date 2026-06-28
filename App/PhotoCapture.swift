@@ -158,7 +158,6 @@ extension UIImage {
             tagged.draw(in: CGRect(origin: .zero, size: tagged.size))
         }
 
-        print("📐 ORIENT: exif=\(orientation.rawValue) ui=\(uiOrientation.rawValue) baked=\(Int(upright.size.width))x\(Int(upright.size.height))")
         return upright
     }
 }

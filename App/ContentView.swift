@@ -11,18 +11,6 @@ struct ContentView: View {
                 }
                 .ignoresSafeArea()
 
-                // TEMP DEBUG HUD: confirms running build + shows orientation ground truth.
-                VStack {
-                    Text(cameraModel.debugInfo)
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(.yellow)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.6))
-                        .padding(.top, 56)
-                    Spacer()
-                }
-
                 VStack {
                     Spacer()
                     
