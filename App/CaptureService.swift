@@ -83,7 +83,28 @@ actor CaptureService {
     var currentCameraPosition: AVCaptureDevice.Position {
         return activeVideoInput?.device.position ?? .back
     }
-    
+
+    var activeDevice: AVCaptureDevice? {
+        activeVideoInput?.device
+    }
+
+    /// Applies the capture rotation angle and front/back mirroring to the photo-output
+    /// connection so captured pixel buffers come out upright (and mirrored for the front
+    /// camera, to match the mirrored preview).
+    func applyCaptureGeometry(rotationAngle: CGFloat) {
+        guard let connection = photoCapture.output.connection(with: .video) else { return }
+
+        if connection.isVideoRotationAngleSupported(rotationAngle) {
+            connection.videoRotationAngle = rotationAngle
+        }
+
+        let isFront = activeVideoInput?.device.position == .front
+        if connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false
+            connection.isVideoMirrored = isFront
+        }
+    }
+
     func focusAt(point: CGPoint) async throws {
         guard let device = activeVideoInput?.device else { return }
         
