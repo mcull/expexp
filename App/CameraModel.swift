@@ -14,6 +14,14 @@ class CameraModel: ObservableObject {
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var previewAngleObservation: NSKeyValueObservation?
     private var captureAngleObservation: NSKeyValueObservation?
+
+    // TEMP DEBUG: on-screen HUD to confirm running build and inspect orientation ground truth.
+    @Published var debugInfo: String = "O3 — waiting for camera"
+    private var lastPreviewAngle: CGFloat = -1
+    private var lastCaptureAngle: CGFloat = -1
+    private func refreshDebugInfo(extra: String = "") {
+        debugInfo = "O3 prev=\(Int(lastPreviewAngle)) cap=\(Int(lastCaptureAngle)) \(extra)"
+    }
     
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
@@ -96,14 +104,18 @@ class CameraModel: ObservableObject {
     }
 
     private func applyPreviewAngle(_ angle: CGFloat) {
+        lastPreviewAngle = angle
         guard let connection = previewView?.previewLayer.connection else { return }
         if connection.isVideoRotationAngleSupported(angle) {
             connection.videoRotationAngle = angle
         }
+        refreshDebugInfo()
     }
 
     private func applyCaptureAngle(_ angle: CGFloat) async {
+        lastCaptureAngle = angle
         await captureService.applyCaptureGeometry(rotationAngle: angle)
+        refreshDebugInfo()
     }
 
     func capturePhoto() {
@@ -111,6 +123,7 @@ class CameraModel: ObservableObject {
             do {
                 let (image, photo) = try await captureService.capturePhotoWithRawData()
                 print("📷 DEBUG: Captured raw image with size: \(image.size), orientation: \(image.imageOrientation.displayName)")
+                refreshDebugInfo(extra: "exif=\(photo.cgImageOrientation.rawValue) sz=\(Int(image.size.width))x\(Int(image.size.height))")
 
                 // Store raw image for final processing
                 capturedRawImages.append(image)
