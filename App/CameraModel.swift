@@ -178,8 +178,13 @@ class CameraModel: ObservableObject {
                         let reference = processedImages[0]
                         var aligned: [UIImage] = [reference]
                         for (idx, img) in processedImages.dropFirst().enumerated() {
+                            // Face pre-align is disabled: it warps only the downscaled image used
+                            // to compute the transform, but the final transform is applied to the
+                            // original image, causing front-camera (face) shots to shift sideways.
+                            // Translational alignment alone is what makes the back camera lock in.
+                            // A correct face-aware aligner is deferred to mini-project #4.
                             let options = AlignmentOptions(preferHomography: true,
-                                                           enableVisionPrealign: true,
+                                                           enableVisionPrealign: false,
                                                            enableLocalRefine: false,
                                                            downscaleTargetMP: 1.5,
                                                            timeBudgetMS: 250,
