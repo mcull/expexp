@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		043AF36FF0DEBF26851A0CAD /* AlignmentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2C84263122602465CE4302B /* AlignmentEngine.swift */; };
+		AAAA0001AABBCCDDEEFF0001 /* AlignmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */; };
 		15DC512965243C11AE8FA3A1 /* OCVAligner.mm in Sources */ = {isa = PBXBuildFile; fileRef = 63F75E875C6B37440E550F13 /* OCVAligner.mm */; };
 		22DF97CBF42275A497D93BE4 /* CaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1BAFF4F16BE251D02D56ACE /* CaptureService.swift */; };
 		4A590F31656D669E38695834 /* AlignmentLog.md in Resources */ = {isa = PBXBuildFile; fileRef = 78AFEF0582375267184506FB /* AlignmentLog.md */; };
@@ -32,6 +33,7 @@
 		B4886568650B9CA47DDF2557 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
 		BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C2C84263122602465CE4302B /* AlignmentEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlignmentEngine.swift; sourceTree = "<group>"; };
+		AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlignmentService.swift; sourceTree = "<group>"; };
 		CEECD1650CE94D6154C6435C /* ExpexpApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpexpApp.swift; sourceTree = "<group>"; };
 		D5C57E4FF8C4AEA431FC2506 /* PhotoLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryService.swift; sourceTree = "<group>"; };
 		E26EB170B5CEE1518D817BDC /* VisionAlignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionAlignment.swift; sourceTree = "<group>"; };
@@ -78,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				C2C84263122602465CE4302B /* AlignmentEngine.swift */,
+				AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */,
 				E8ACAD32A036F63B7EDDD20D /* OCVAligner.h */,
 				63F75E875C6B37440E550F13 /* OCVAligner.mm */,
 				E26EB170B5CEE1518D817BDC /* VisionAlignment.swift */,
@@ -164,6 +167,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				043AF36FF0DEBF26851A0CAD /* AlignmentEngine.swift in Sources */,
+				AAAA0001AABBCCDDEEFF0001 /* AlignmentService.swift in Sources */,
 				5B6F920C337AAE5E1772BBCE /* CameraModel.swift in Sources */,
 				E9E1D9E6232CD798B2DD5CFE /* CameraPreview.swift in Sources */,
 				22DF97CBF42275A497D93BE4 /* CaptureService.swift in Sources */,
