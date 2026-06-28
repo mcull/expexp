@@ -214,10 +214,10 @@ class PreviewView: UIView, PreviewTarget {
     // Apply vertical flip always to match preview's coordinate system, and
     // horizontal flip when the preview connection is mirrored (front camera).
     private func applyCompositeTransform() {
-        let isMirrored = previewLayer.connection?.isVideoMirrored ?? false
-        let sx: CGFloat = isMirrored ? -1 : 1
-        let sy: CGFloat = -1
-        ghostCompositeLayer.setAffineTransform(CGAffineTransform(scaleX: sx, y: sy))
+        // Frames are captured upright and front-camera frames are mirrored to match the
+        // preview, so the ghost composite needs no extra flip. Kept as the single tuning
+        // point for overlay orientation.
+        ghostCompositeLayer.setAffineTransform(.identity)
     }
 
     // Public hook to refresh mirroring when camera changes
