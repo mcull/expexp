@@ -14,6 +14,11 @@ class CameraModel: ObservableObject {
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var previewAngleObservation: NSKeyValueObservation?
     private var captureAngleObservation: NSKeyValueObservation?
+
+    /// Capture rotation angle locked to the first exposure of the current stack, so every
+    /// exposure shares one orientation (portrait or landscape) and blends cleanly. Nil when
+    /// no stack is in progress; reset on save/clear so the next stack picks a fresh orientation.
+    private var lockedCaptureAngle: CGFloat?
     
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
@@ -81,7 +86,8 @@ class CameraModel: ObservableObject {
         rotationCoordinator = coordinator
 
         applyPreviewAngle(coordinator.videoRotationAngleForHorizonLevelPreview)
-        await applyCaptureAngle(coordinator.videoRotationAngleForHorizonLevelCapture)
+        // If a stack is in progress, keep its locked orientation; otherwise track the device.
+        await applyCaptureAngle(lockedCaptureAngle ?? coordinator.videoRotationAngleForHorizonLevelCapture)
 
         previewAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview,
                                                       options: [.new]) { [weak self] _, change in
@@ -91,7 +97,13 @@ class CameraModel: ObservableObject {
         captureAngleObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture,
                                                       options: [.new]) { [weak self] _, change in
             guard let angle = change.newValue else { return }
-            Task { @MainActor in await self?.applyCaptureAngle(angle) }
+            Task { @MainActor in
+                guard let self else { return }
+                // Don't let device rotation override a stack's locked orientation.
+                if self.lockedCaptureAngle == nil {
+                    await self.applyCaptureAngle(angle)
+                }
+            }
         }
     }
 
@@ -109,6 +121,15 @@ class CameraModel: ObservableObject {
     func capturePhoto() {
         Task {
             do {
+                // Lock the stack's orientation to the first exposure's physical orientation,
+                // then apply it for every shot so the whole stack stays portrait or landscape.
+                if capturedRawImages.isEmpty {
+                    lockedCaptureAngle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
+                }
+                if let angle = lockedCaptureAngle {
+                    await applyCaptureAngle(angle)
+                }
+
                 let (image, photo) = try await captureService.capturePhotoWithRawData()
                 print("📷 DEBUG: Captured raw image with size: \(image.size), orientation: \(image.imageOrientation.displayName)")
 
@@ -225,6 +246,7 @@ class CameraModel: ObservableObject {
                 capturedRawImages.removeAll()
                 capturedPhotos.removeAll()
                 ghostPreviewImages.removeAll()
+                lockedCaptureAngle = nil  // next stack picks a fresh orientation
                 previewView?.updateGhostImages([], opacity: 0)
             } catch {
                 alertMessage = "Failed to save photo: \(error.localizedDescription)"
@@ -237,6 +259,7 @@ class CameraModel: ObservableObject {
         capturedRawImages.removeAll()
         capturedPhotos.removeAll()
         ghostPreviewImages.removeAll()
+        lockedCaptureAngle = nil  // next stack picks a fresh orientation
         previewView?.updateGhostImages([], opacity: 0)
     }
 
