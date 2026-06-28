@@ -36,7 +36,7 @@ enum AlignmentService {
     static func alignment(moving: UIImage, reference: UIImage, anchor: AlignmentAnchor) -> FrameAlignment {
         switch anchor {
         case .scene: return sceneAlignment(moving: moving, reference: reference)
-        case .face:  return .unlocked   // implemented in Phase B (Task B1)
+        case .face:  return faceAlignment(moving: moving, reference: reference)
         }
     }
 
@@ -62,6 +62,68 @@ enum AlignmentService {
         if abs(dx) > maxShiftFraction || abs(dy) > maxShiftFraction { return .unlocked }
         return FrameAlignment(dx: dx, dy: dy, rotation: 0, scale: 1,
                               anchor: CGPoint(x: 0.5, y: 0.5), locked: true)
+    }
+
+    // MARK: - Face (similarity: translate + rotate + uniform scale, pinned to the face)
+
+    /// Acceptable face-scale ratio; outside this we assume a bad detection and fall back.
+    static let faceScaleRange: ClosedRange<CGFloat> = 0.3...3.0
+
+    private static func faceAlignment(moving: UIImage, reference: UIImage) -> FrameAlignment {
+        guard let movCG = moving.cgImage, let refCG = reference.cgImage,
+              let mEyes = eyeCenters(in: movCG), let rEyes = eyeCenters(in: refCG) else {
+            return .unlocked
+        }
+        // Pixel-space geometry (true angle/scale); image dims for normalization.
+        let mw = CGFloat(movCG.width), mh = CGFloat(movCG.height)
+        let rw = CGFloat(refCG.width), rh = CGFloat(refCG.height)
+        let mL = CGPoint(x: mEyes.left.x * mw, y: mEyes.left.y * mh)
+        let mR = CGPoint(x: mEyes.right.x * mw, y: mEyes.right.y * mh)
+        let rL = CGPoint(x: rEyes.left.x * rw, y: rEyes.left.y * rh)
+        let rR = CGPoint(x: rEyes.right.x * rw, y: rEyes.right.y * rh)
+
+        let mMidPx = CGPoint(x: (mL.x + mR.x) / 2, y: (mL.y + mR.y) / 2)
+        let rMidPx = CGPoint(x: (rL.x + rR.x) / 2, y: (rL.y + rR.y) / 2)
+        let mVec = CGVector(dx: mR.x - mL.x, dy: mR.y - mL.y)
+        let rVec = CGVector(dx: rR.x - rL.x, dy: rR.y - rL.y)
+        let mLen = max(hypot(mVec.dx, mVec.dy), 1e-6)
+        let rLen = max(hypot(rVec.dx, rVec.dy), 1e-6)
+        let scale = rLen / mLen
+        guard faceScaleRange.contains(scale) else { return .unlocked }
+        let rotation = atan2(rVec.dy, rVec.dx) - atan2(mVec.dy, mVec.dx)
+
+        // Anchor = moving eye midpoint (normalized to moving image). Shift maps moving mid → ref
+        // mid, normalized to the moving image dims (the frame the compositor draws).
+        let anchor = CGPoint(x: mMidPx.x / mw, y: mMidPx.y / mh)
+        let dx = (rMidPx.x / rw) - (mMidPx.x / mw)
+        let dy = (rMidPx.y / rh) - (mMidPx.y / mh)
+        return FrameAlignment(dx: dx, dy: dy, rotation: rotation, scale: scale, anchor: anchor, locked: true)
+    }
+
+    private struct EyeCenters { let left: CGPoint; let right: CGPoint }  // normalized, top-left origin
+
+    /// Largest face's eye centers, normalized (0...1) in top-left coordinates.
+    private static func eyeCenters(in cgImage: CGImage) -> EyeCenters? {
+        let request = VNDetectFaceLandmarksRequest()
+        let handler = VNImageRequestHandler(cgImage: cgImage)
+        do { try handler.perform([request]) } catch { return nil }
+        guard let faces = request.results, !faces.isEmpty else { return nil }
+        guard let face = faces.max(by: {
+            $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height
+        }) else { return nil }
+        guard let lm = face.landmarks,
+              let left = lm.leftEye?.normalizedPoints, !left.isEmpty,
+              let right = lm.rightEye?.normalizedPoints, !right.isEmpty else { return nil }
+        let bbox = face.boundingBox
+        func center(_ pts: [CGPoint]) -> CGPoint {
+            let sum = pts.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+            let n = CGFloat(pts.count)
+            // Landmark points are normalized within the bbox, bottom-left origin.
+            let xBL = bbox.origin.x + (sum.x / n) * bbox.size.width
+            let yBL = bbox.origin.y + (sum.y / n) * bbox.size.height
+            return CGPoint(x: xBL, y: 1 - yBL)  // → top-left origin
+        }
+        return EyeCenters(left: center(left), right: center(right))
     }
 
     // MARK: - Helpers
