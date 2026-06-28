@@ -16,11 +16,11 @@ class CameraModel: ObservableObject {
     private var captureAngleObservation: NSKeyValueObservation?
 
     // TEMP DEBUG: on-screen HUD to confirm running build and inspect orientation ground truth.
-    @Published var debugInfo: String = "O3 — waiting for camera"
+    @Published var debugInfo: String = "O4 — waiting for camera"
     private var lastPreviewAngle: CGFloat = -1
     private var lastCaptureAngle: CGFloat = -1
     private func refreshDebugInfo(extra: String = "") {
-        debugInfo = "O3 prev=\(Int(lastPreviewAngle)) cap=\(Int(lastCaptureAngle)) \(extra)"
+        debugInfo = "O4 prev=\(Int(lastPreviewAngle)) cap=\(Int(lastCaptureAngle)) \(extra)"
     }
     
     @Published var isAuthorized = false
