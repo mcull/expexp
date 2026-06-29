@@ -32,8 +32,6 @@ class CameraModel: ObservableObject {
     }
     /// Briefly true when a just-captured frame could not be aligned (Magic on).
     @Published var showAlignmentWarning: Bool = false
-    /// TEMP DEBUG: front-camera orientation/face-rotation diagnostics.
-    @Published var debugInfo: String = "F1"
 
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
@@ -162,12 +160,10 @@ class CameraModel: ObservableObject {
                 // Compute this frame's alignment relative to the first (reference) frame.
                 if capturedRawImages.count == 1 {
                     transforms = [.identity]
-                    debugInfo = "F1 #1 \(Int(image.size.width))x\(Int(image.size.height)) prev\(Int(lastPreviewAngle)) \(currentAnchor == .face ? "face" : "scene")"
                 } else if isAlignmentEnabled, let reference = capturedRawImages.first {
                     let a = AlignmentService.alignment(moving: image, reference: reference, anchor: currentAnchor)
                     transforms.append(a)
                     if !a.locked { flashAlignmentWarning() }
-                    debugInfo = "F1 #\(capturedRawImages.count) \(Int(image.size.width))x\(Int(image.size.height)) rot\(Int(a.rotation * 180 / .pi)) sc\(String(format: "%.2f", a.scale)) lk\(a.locked ? 1 : 0)"
                 } else {
                     transforms.append(.identity)
                 }
