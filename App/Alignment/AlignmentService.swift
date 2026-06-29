@@ -68,6 +68,9 @@ enum AlignmentService {
 
     /// Acceptable face-scale ratio; outside this we assume a bad detection and fall back.
     static let faceScaleRange: ClosedRange<CGFloat> = 0.3...3.0
+    /// Max plausible face rotation between handheld frames. Beyond this = bad detection (e.g. a
+    /// mislocated eye producing a ~90° swing), so we fall back rather than spin the frame.
+    static let maxFaceRotation: CGFloat = .pi / 6  // 30°
 
     private static func faceAlignment(moving: UIImage, reference: UIImage) -> FrameAlignment {
         guard let movCG = moving.cgImage, let refCG = reference.cgImage,
@@ -90,7 +93,10 @@ enum AlignmentService {
         let rLen = max(hypot(rVec.dx, rVec.dy), 1e-6)
         let scale = rLen / mLen
         guard faceScaleRange.contains(scale) else { return .unlocked }
-        let rotation = atan2(rVec.dy, rVec.dx) - atan2(mVec.dy, mVec.dx)
+        // Normalize the rotation to [-π, π] and reject implausible swings (bad eye detection).
+        let rawRotation = atan2(rVec.dy, rVec.dx) - atan2(mVec.dy, mVec.dx)
+        let rotation = atan2(sin(rawRotation), cos(rawRotation))
+        guard abs(rotation) <= maxFaceRotation else { return .unlocked }
 
         // Anchor = moving eye midpoint (normalized to moving image). Shift maps moving mid → ref
         // mid, normalized to the moving image dims (the frame the compositor draws).
