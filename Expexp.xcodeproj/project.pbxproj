@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		AAAA0001AABBCCDDEEFF0001 /* AlignmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */; };
 		AAAA0003AABBCCDDEEFF0003 /* ExposureCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA0004AABBCCDDEEFF0004 /* ExposureCompositor.swift */; };
+		BBBB0001AABBCCDDEEFF0001 /* BlendLook.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBB0002AABBCCDDEEFF0002 /* BlendLook.swift */; };
 		22DF97CBF42275A497D93BE4 /* CaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1BAFF4F16BE251D02D56ACE /* CaptureService.swift */; };
 		4A590F31656D669E38695834 /* AlignmentLog.md in Resources */ = {isa = PBXBuildFile; fileRef = 78AFEF0582375267184506FB /* AlignmentLog.md */; };
 		54DE4DAB09F183B9C6339907 /* PhotoLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5C57E4FF8C4AEA431FC2506 /* PhotoLibraryService.swift */; };
@@ -31,6 +32,7 @@
 		BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlignmentService.swift; sourceTree = "<group>"; };
 		AAAA0004AABBCCDDEEFF0004 /* ExposureCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureCompositor.swift; sourceTree = "<group>"; };
+		BBBB0002AABBCCDDEEFF0002 /* BlendLook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlendLook.swift; sourceTree = "<group>"; };
 		CEECD1650CE94D6154C6435C /* ExpexpApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpexpApp.swift; sourceTree = "<group>"; };
 		D5C57E4FF8C4AEA431FC2506 /* PhotoLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryService.swift; sourceTree = "<group>"; };
 		FC7A21DA945374E0AB9E4119 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -76,6 +78,7 @@
 			children = (
 				AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */,
 				AAAA0004AABBCCDDEEFF0004 /* ExposureCompositor.swift */,
+				BBBB0002AABBCCDDEEFF0002 /* BlendLook.swift */,
 			);
 			path = Alignment;
 			sourceTree = "<group>";
@@ -160,6 +163,7 @@
 			files = (
 				AAAA0001AABBCCDDEEFF0001 /* AlignmentService.swift in Sources */,
 				AAAA0003AABBCCDDEEFF0003 /* ExposureCompositor.swift in Sources */,
+				BBBB0001AABBCCDDEEFF0001 /* BlendLook.swift in Sources */,
 				5B6F920C337AAE5E1772BBCE /* CameraModel.swift in Sources */,
 				E9E1D9E6232CD798B2DD5CFE /* CameraPreview.swift in Sources */,
 				22DF97CBF42275A497D93BE4 /* CaptureService.swift in Sources */,
