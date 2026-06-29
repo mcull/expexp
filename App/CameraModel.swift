@@ -24,8 +24,12 @@ class CameraModel: ObservableObject {
 
     /// Alignment of each captured frame relative to frame 0 (parallel to capturedRawImages).
     private var transforms: [FrameAlignment] = []
-    /// Anchor for alignment. Phase A always uses .scene; Phase B selects by camera.
-    private var currentAnchor: AlignmentAnchor { .scene }
+    /// Active camera position, used to pick the alignment anchor.
+    private var captureCameraPosition: AVCaptureDevice.Position = .back
+    /// Anchor: front camera freezes the face (selfie swirl); back camera freezes the scene.
+    private var currentAnchor: AlignmentAnchor {
+        captureCameraPosition == .front ? .face : .scene
+    }
     /// Briefly true when a just-captured frame could not be aligned (Magic on).
     @Published var showAlignmentWarning: Bool = false
 
@@ -78,6 +82,7 @@ class CameraModel: ObservableObject {
                 await captureService.start()
                 isSessionRunning = true
                 await setUpRotationCoordinator()
+                captureCameraPosition = await captureService.currentCameraPosition
             } catch {
                 alertMessage = "Failed to set up camera: \(error.localizedDescription)"
                 showAlert = true
@@ -181,6 +186,9 @@ class CameraModel: ObservableObject {
                 // Refresh overlay mirroring to match new camera connection
                 previewView?.refreshMirroring()
                 await setUpRotationCoordinator()
+                captureCameraPosition = await captureService.currentCameraPosition
+                recomputeTransforms()
+                updateGhostPreviewOverlay()
             } catch {
                 alertMessage = "Failed to switch camera: \(error.localizedDescription)"
                 showAlert = true
@@ -275,9 +283,12 @@ class CameraModel: ObservableObject {
             previewView?.setOverlayImage(nil, opacity: 0)
             return
         }
-        // Degrees the overlay must rotate to match the live preview (which leans on the device).
-        // Portrait baseline is 90; landscape gives ±90, upside-down 180.
-        let delta = lastPreviewAngle - 90
+        // Degrees the overlay must rotate to match the live preview. The portrait baseline is
+        // camera-specific: the back lens reports 90 in portrait, the front lens reports 0 (their
+        // sensors are mounted 90° apart). Subtracting the baseline yields 0 in portrait and ±90
+        // in landscape for both lenses.
+        let portraitBaseline: CGFloat = (captureCameraPosition == .front) ? 0 : 90
+        let delta = lastPreviewAngle - portraitBaseline
         let quarterTurned = (Int(delta.rounded()) % 180 + 180) % 180 == 90
         // Build the composite in the device's display orientation, then rotate it for the
         // portrait-locked overlay layer so it lines up with the rotated live feed.
