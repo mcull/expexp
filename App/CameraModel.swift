@@ -32,6 +32,8 @@ class CameraModel: ObservableObject {
     }
     /// Briefly true when a just-captured frame could not be aligned (Magic on).
     @Published var showAlignmentWarning: Bool = false
+    /// TEMP DEBUG: front-camera orientation/face-rotation diagnostics.
+    @Published var debugInfo: String = "F1"
 
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
@@ -160,10 +162,12 @@ class CameraModel: ObservableObject {
                 // Compute this frame's alignment relative to the first (reference) frame.
                 if capturedRawImages.count == 1 {
                     transforms = [.identity]
+                    debugInfo = "F1 #1 \(Int(image.size.width))x\(Int(image.size.height)) prev\(Int(lastPreviewAngle)) \(currentAnchor == .face ? "face" : "scene")"
                 } else if isAlignmentEnabled, let reference = capturedRawImages.first {
                     let a = AlignmentService.alignment(moving: image, reference: reference, anchor: currentAnchor)
                     transforms.append(a)
                     if !a.locked { flashAlignmentWarning() }
+                    debugInfo = "F1 #\(capturedRawImages.count) \(Int(image.size.width))x\(Int(image.size.height)) rot\(Int(a.rotation * 180 / .pi)) sc\(String(format: "%.2f", a.scale)) lk\(a.locked ? 1 : 0)"
                 } else {
                     transforms.append(.identity)
                 }
@@ -283,9 +287,12 @@ class CameraModel: ObservableObject {
             previewView?.setOverlayImage(nil, opacity: 0)
             return
         }
-        // Degrees the overlay must rotate to match the live preview (which leans on the device).
-        // Portrait baseline is 90; landscape gives ±90, upside-down 180.
-        let delta = lastPreviewAngle - 90
+        // Degrees the overlay must rotate to match the live preview. The portrait baseline is
+        // camera-specific: the back lens reports 90 in portrait, the front lens reports 0 (their
+        // sensors are mounted 90° apart). Subtracting the baseline yields 0 in portrait and ±90
+        // in landscape for both lenses.
+        let portraitBaseline: CGFloat = (captureCameraPosition == .front) ? 0 : 90
+        let delta = lastPreviewAngle - portraitBaseline
         let quarterTurned = (Int(delta.rounded()) % 180 + 180) % 180 == 90
         // Build the composite in the device's display orientation, then rotate it for the
         // portrait-locked overlay layer so it lines up with the rotated live feed.
