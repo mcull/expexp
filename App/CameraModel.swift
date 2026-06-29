@@ -45,9 +45,8 @@ class CameraModel: ObservableObject {
         }
     }
     
-    /// Per-exposure alpha used for both preview and save-time lighten blends.
-    /// Keeping this configurable ensures the live preview closely matches the final export.
-    @Published var ghostExposureAlpha: Double = 0.8 {
+    /// Finishing look for the filmic-average blend. Hardcoded default; a picker can bind this later.
+    @Published var blendLook: BlendLook = .filmic {
         didSet {
             updateGhostPreviewOverlay()
         }
@@ -224,7 +223,7 @@ class CameraModel: ObservableObject {
                                                                        alignments: transforms,
                                                                        canvasSize: canvas,
                                                                        scale: 1,
-                                                                       exposureAlpha: CGFloat(ghostExposureAlpha)) {
+                                                                       look: blendLook) {
                     finalImage = composite
                     print("🖼️ DEBUG: Composited \(capturedRawImages.count) frames (aligned: \(isAlignmentEnabled))")
                 } else {
@@ -297,7 +296,7 @@ class CameraModel: ObservableObject {
                                                      alignments: transforms,
                                                      canvasSize: canvas,
                                                      scale: UIScreen.main.scale,
-                                                     exposureAlpha: CGFloat(ghostExposureAlpha))
+                                                     look: blendLook)
         let display = composite.flatMap { rotatedForPreview($0, degrees: delta) }
         previewView?.setOverlayImage(display, opacity: CGFloat(1.0 - ghostOpacity))
     }

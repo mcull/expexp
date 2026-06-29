@@ -1,38 +1,100 @@
 import UIKit
+import CoreImage
 
-/// The single lighten-blend compositor used by BOTH the live preview and the save path, so the
-/// preview is a faithful (screen-cropped) preview of the saved result.
+/// The single compositor used by BOTH the live preview and the save path (WYSIWYG).
+/// Produces an equal-weight, order-independent, coverage-weighted average of the aligned frames
+/// in LINEAR light, finished with a `BlendLook` tone curve.
 enum ExposureCompositor {
-    /// Lighten-blends `frames` into `canvasSize`. Each frame is drawn aspect-fill, then transformed
-    /// by its `FrameAlignment` (rotation/scale about the normalized anchor, then a normalized shift).
-    /// `alignments[i]` corresponds to `frames[i]`; index 0 is the reference (identity).
+    /// Linear-light working space for the averaging stage.
+    private static let linearContext: CIContext = {
+        if let linear = CGColorSpace(name: CGColorSpace.linearSRGB) {
+            return CIContext(options: [.workingColorSpace: linear])
+        }
+        return CIContext()
+    }()
+    /// sRGB working space for the tone-curve stage (so curves act on sRGB values).
+    private static let toneContext: CIContext = {
+        if let srgb = CGColorSpace(name: CGColorSpace.sRGB) {
+            return CIContext(options: [.workingColorSpace: srgb])
+        }
+        return CIContext()
+    }()
+    private static let sRGB = CGColorSpace(name: CGColorSpace.sRGB)
+
     static func composite(frames: [UIImage],
                           alignments: [FrameAlignment],
                           canvasSize: CGSize,
                           scale: CGFloat,
-                          exposureAlpha: CGFloat) -> UIImage? {
+                          look: BlendLook) -> UIImage? {
         guard !frames.isEmpty, canvasSize.width > 0, canvasSize.height > 0 else { return nil }
+
+        // 1. Render each aligned frame into its own canvas-sized image (proven UIKit geometry).
+        var positioned: [CIImage] = []
+        for (i, frame) in frames.enumerated() {
+            let a = i < alignments.count ? alignments[i] : .identity
+            guard let img = renderPositioned(frame: frame, alignment: a, canvasSize: canvasSize, scale: scale),
+                  let ci = CIImage(image: img) else { continue }
+            positioned.append(ci)
+        }
+        guard !positioned.isEmpty else { return nil }
+
+        // 2. Coverage-weighted equal-weight average in LINEAR light: composite the i-th frame
+        //    (1-indexed) at opacity 1/i with source-over → running mean; transparent gaps don't
+        //    contribute, so each pixel averages only the frames that cover it.
+        var acc: CIImage?
+        for (idx, ci) in positioned.enumerated() {
+            let opacity = CGFloat(1.0) / CGFloat(idx + 1)
+            let faded = ci.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: opacity, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: opacity, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: opacity, w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: opacity),
+            ])
+            if let a = acc {
+                acc = faded.applyingFilter("CISourceOverCompositing", parameters: [kCIInputBackgroundImageKey: a])
+            } else {
+                acc = faded
+            }
+        }
+        guard let averaged = acc else { return nil }
+
+        // 3. Render the linear average to sRGB pixels.
+        let pxRect = CGRect(x: 0, y: 0, width: canvasSize.width * scale, height: canvasSize.height * scale)
+        let renderSpace = sRGB ?? CGColorSpaceCreateDeviceRGB()
+        guard let avgCG = linearContext.createCGImage(averaged, from: pxRect, format: .RGBA8, colorSpace: renderSpace) else {
+            return nil
+        }
+
+        // 4. Apply the look's tone curve (acts on sRGB values), render to the final image.
+        let toned = look.apply(to: CIImage(cgImage: avgCG))
+        guard let finalCG = toneContext.createCGImage(toned, from: toned.extent, format: .RGBA8, colorSpace: renderSpace) else {
+            return UIImage(cgImage: avgCG, scale: scale, orientation: .up)
+        }
+        return UIImage(cgImage: finalCG, scale: scale, orientation: .up)
+    }
+
+    /// Draws one frame into a transparent canvas-sized image, applying its alignment transform
+    /// (rotate/scale about the normalized anchor, then a normalized shift) over an aspect-fill base.
+    private static func renderPositioned(frame: UIImage,
+                                         alignment a: FrameAlignment,
+                                         canvasSize: CGSize,
+                                         scale: CGFloat) -> UIImage? {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = false
-        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
-        return renderer.image { ctx in
+        return UIGraphicsImageRenderer(size: canvasSize, format: format).image { ctx in
             let cg = ctx.cgContext
             cg.clear(CGRect(origin: .zero, size: canvasSize))
-            for (i, frame) in frames.enumerated() {
-                let a = i < alignments.count ? alignments[i] : .identity
-                let base = aspectFillRect(imageSize: frame.size, canvasSize: canvasSize)
-                let pivot = CGPoint(x: base.minX + a.anchor.x * base.width,
-                                    y: base.minY + a.anchor.y * base.height)
-                cg.saveGState()
-                // Rotate/scale about the pivot, then apply the normalized shift.
-                cg.translateBy(x: pivot.x + a.dx * base.width, y: pivot.y + a.dy * base.height)
-                cg.rotate(by: a.rotation)
-                cg.scaleBy(x: a.scale, y: a.scale)
-                cg.translateBy(x: -pivot.x, y: -pivot.y)
-                frame.draw(in: base, blendMode: .lighten, alpha: exposureAlpha)
-                cg.restoreGState()
-            }
+            let base = aspectFillRect(imageSize: frame.size, canvasSize: canvasSize)
+            let pivot = CGPoint(x: base.minX + a.anchor.x * base.width,
+                                y: base.minY + a.anchor.y * base.height)
+            cg.saveGState()
+            cg.translateBy(x: pivot.x + a.dx * base.width, y: pivot.y + a.dy * base.height)
+            cg.rotate(by: a.rotation)
+            cg.scaleBy(x: a.scale, y: a.scale)
+            cg.translateBy(x: -pivot.x, y: -pivot.y)
+            frame.draw(in: base)   // opaque draw (no blend); alpha = 1 where covered, 0 in gaps
+            cg.restoreGState()
         }
     }
 
