@@ -21,6 +21,7 @@
 		B3A794C7E99842CCF0752169 /* ExpexpApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEECD1650CE94D6154C6435C /* ExpexpApp.swift */; };
 		E9E1D9E6232CD798B2DD5CFE /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F00CB5A1F0A38703B90A7F /* CameraPreview.swift */; };
 		FEB64FAEB271E33507EA2D68 /* PhotoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473324B840A3C861AB6DEE7B /* PhotoCapture.swift */; };
+		EEEE0001AABBCCDDEEFF0001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EEEE0002AABBCCDDEEFF0002 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		CEECD1650CE94D6154C6435C /* ExpexpApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpexpApp.swift; sourceTree = "<group>"; };
 		D5C57E4FF8C4AEA431FC2506 /* PhotoLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryService.swift; sourceTree = "<group>"; };
 		FC7A21DA945374E0AB9E4119 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EEEE0002AABBCCDDEEFF0002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -54,6 +56,7 @@
 				DDDD0002AABBCCDDEEFF0002 /* LockMonitor.swift */,
 				CEECD1650CE94D6154C6435C /* ExpexpApp.swift */,
 				FC7A21DA945374E0AB9E4119 /* Info.plist */,
+				EEEE0002AABBCCDDEEFF0002 /* Assets.xcassets */,
 				473324B840A3C861AB6DEE7B /* PhotoCapture.swift */,
 				D5C57E4FF8C4AEA431FC2506 /* PhotoLibraryService.swift */,
 				F1FEDC0B7D3A0FD36C2AF83C /* Alignment */,
@@ -155,6 +158,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EEEE0001AABBCCDDEEFF0001 /* Assets.xcassets in Resources */,
 				7DC4241358EF1505BCDD0BB8 /* AlignmentDesign.md in Resources */,
 				4A590F31656D669E38695834 /* AlignmentLog.md in Resources */,
 			);
@@ -189,6 +193,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = N7ZX6XG86A;
@@ -214,6 +219,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = N7ZX6XG86A;
