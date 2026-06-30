@@ -168,28 +168,34 @@ private struct ShutterButton: View {
 private struct LevelReticle: View {
     @ObservedObject var lock: LockMonitor
     private let travel: CGFloat = 44   // max bubble offset from center (points)
-    private var ice: Color { Color(red: 0.72, green: 0.9, blue: 1.0) }
+    private var locked: Bool { lock.isCentered }
+    private var lockGreen: Color { Color(red: 0.45, green: 0.95, blue: 0.6) }
 
     var body: some View {
         ZStack {
-            // Sight ring + 4 ticks, banked by roll.
+            // Sight ring + 4 ticks, banked by roll. Ring turns green when fully matched (bubble
+            // centered AND sight upright).
             ZStack {
-                Circle().stroke(.white.opacity(0.22), lineWidth: 1).frame(width: 100, height: 100)
+                Circle()
+                    .stroke(locked ? lockGreen : .white.opacity(0.22), lineWidth: locked ? 1.5 : 1)
+                    .frame(width: 100, height: 100)
+                    .shadow(color: locked ? lockGreen.opacity(0.7) : .clear, radius: 7)
                 ForEach(0..<4, id: \.self) { i in
-                    Rectangle().fill(.white.opacity(0.4)).frame(width: 2, height: 8)
+                    Rectangle().fill(locked ? lockGreen : .white.opacity(0.4)).frame(width: 2, height: 8)
                         .offset(y: -50).rotationEffect(.degrees(Double(i) * 90))
                 }
             }
             .rotationEffect(.radians(-lock.roll))
+            .animation(.easeOut(duration: 0.15), value: locked)
 
             // Center target.
-            Circle().stroke(lock.isCentered ? ice : .white.opacity(0.3), lineWidth: 1)
+            Circle().stroke(locked ? lockGreen : .white.opacity(0.3), lineWidth: 1)
                 .frame(width: 22, height: 22)
 
             // Bubble.
-            Circle().fill(lock.isCentered ? ice : .white.opacity(0.9))
+            Circle().fill(locked ? lockGreen : .white.opacity(0.9))
                 .frame(width: 12, height: 12)
-                .shadow(color: lock.isCentered ? ice.opacity(0.8) : .clear, radius: 6)
+                .shadow(color: locked ? lockGreen.opacity(0.8) : .clear, radius: 6)
                 .offset(x: lock.levelOffset.width * travel, y: lock.levelOffset.height * travel)
                 .animation(.easeOut(duration: 0.12), value: lock.levelOffset)
         }
