@@ -52,10 +52,12 @@ struct CameraControlsView: View {
                 }
                 .padding(.horizontal, 28)
 
-                ShutterButton(showsPlus: cameraModel.hasStack,
-                              showRing: cameraModel.isAlignmentEnabled && cameraModel.hasStack,
-                              lockProgress: cameraModel.lockProgress,
-                              action: cameraModel.capturePhoto)
+                ZStack {
+                    ShutterButton(showsPlus: cameraModel.hasStack, action: cameraModel.capturePhoto)
+                    if cameraModel.isAlignmentEnabled && cameraModel.hasStack {
+                        LevelReticle(lock: cameraModel.lockMonitor)
+                    }
+                }
             }
             .padding(.bottom, 18)
 
@@ -140,29 +142,14 @@ private struct ExposureCountView: View {
     }
 }
 
-/// White shutter with an optional scalar lock ring (amber→green, glows solid when locked).
+/// Plain white shutter with a `+` once a stack is in progress.
 private struct ShutterButton: View {
     let showsPlus: Bool
-    let showRing: Bool
-    let lockProgress: Double
     let action: () -> Void
-
-    private var locked: Bool { lockProgress >= 0.95 }
 
     var body: some View {
         Button(action: action) {
             ZStack {
-                if showRing {
-                    Circle().stroke(.white.opacity(0.25), lineWidth: 4)
-                        .frame(width: 84, height: 84)
-                    Circle().trim(from: 0, to: max(0.02, lockProgress))
-                        .stroke(locked ? Color.green : Color.yellow,
-                                style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .frame(width: 84, height: 84)
-                        .rotationEffect(.degrees(-90))
-                        .shadow(color: locked ? .green.opacity(0.7) : .clear, radius: 8)
-                        .animation(.easeOut(duration: 0.15), value: lockProgress)
-                }
                 Circle().fill(.white).frame(width: 66, height: 66)
                     .overlay(Circle().stroke(.black.opacity(0.1), lineWidth: 2))
                 if showsPlus {
@@ -172,5 +159,40 @@ private struct ShutterButton: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Flight-sim level reticle around the shutter: a bubble drifts off-center as the device rotates
+/// away from the first-frame orientation and settles into the center target when matched. The
+/// sight banks with roll. Honest rotation hint (not a "lock") — taps pass through to the shutter.
+private struct LevelReticle: View {
+    @ObservedObject var lock: LockMonitor
+    private let travel: CGFloat = 44   // max bubble offset from center (points)
+    private var ice: Color { Color(red: 0.72, green: 0.9, blue: 1.0) }
+
+    var body: some View {
+        ZStack {
+            // Sight ring + 4 ticks, banked by roll.
+            ZStack {
+                Circle().stroke(.white.opacity(0.22), lineWidth: 1).frame(width: 100, height: 100)
+                ForEach(0..<4, id: \.self) { i in
+                    Rectangle().fill(.white.opacity(0.4)).frame(width: 2, height: 8)
+                        .offset(y: -50).rotationEffect(.degrees(Double(i) * 90))
+                }
+            }
+            .rotationEffect(.radians(-lock.roll))
+
+            // Center target.
+            Circle().stroke(lock.isCentered ? ice : .white.opacity(0.3), lineWidth: 1)
+                .frame(width: 22, height: 22)
+
+            // Bubble.
+            Circle().fill(lock.isCentered ? ice : .white.opacity(0.9))
+                .frame(width: 12, height: 12)
+                .shadow(color: lock.isCentered ? ice.opacity(0.8) : .clear, radius: 6)
+                .offset(x: lock.levelOffset.width * travel, y: lock.levelOffset.height * travel)
+                .animation(.easeOut(duration: 0.12), value: lock.levelOffset)
+        }
+        .allowsHitTesting(false)
     }
 }

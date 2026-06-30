@@ -1,22 +1,26 @@
 import Foundation
 import CoreMotion
 
-/// Turns device attitude (gyro) into a smoothed 0…1 "lock" value: 1 when the device is held in
-/// the same orientation as when `setReference()` was called, falling off as it rotates away.
-/// Cheap and immune to moving subjects (it measures only the device's own motion).
+/// Turns device attitude (gyro) into a flight-sim style level reading relative to a reference
+/// orientation captured at the first exposure:
+///  - `levelOffset`: normalized bubble position (x = yaw, y = pitch), ~-1…1, .zero when matched.
+///  - `roll`: relative roll (radians) for banking the reticle.
+///  - `isCentered`: true when the device is back within a small tolerance of the reference.
+/// Cheap and immune to moving subjects (it measures only the device's own rotation). It does NOT
+/// see sideways translation — the ghost overlay covers that.
 @MainActor
 final class LockMonitor: ObservableObject {
-    /// Smoothed lock value, 0 (off-target) … 1 (locked).
-    @Published private(set) var lockProgress: Double = 0
+    @Published private(set) var levelOffset: CGSize = .zero
+    @Published private(set) var roll: Double = 0
+    @Published private(set) var isCentered: Bool = false
 
     private let motion = CMMotionManager()
     private var reference: CMAttitude?
-    /// Within this deviation, treat as fully locked (ring solid green). Generous for handheld.
-    private let lockedThreshold: Double = 4 * .pi / 180   // 4°
-    /// Deviation at which the ring reads empty (0). Between this and `lockedThreshold` it ramps.
-    private let maxDeviation: Double = 16 * .pi / 180      // 16°
-    /// EMA smoothing factor (0..1); lower = smoother.
-    private let smoothing: Double = 0.2
+    /// Deviation (radians) that pushes the bubble to the edge of the reticle.
+    private let maxDeviation: Double = 12 * .pi / 180   // 12°
+    /// Within this total deviation, treat as centered/matched.
+    private let centeredThreshold: Double = 2.5 * .pi / 180   // 2.5°
+    private let smoothing: Double = 0.25
 
     func start() {
         guard motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive else { return }
@@ -29,38 +33,41 @@ final class LockMonitor: ObservableObject {
 
     func stop() {
         if motion.isDeviceMotionActive { motion.stopDeviceMotionUpdates() }
-        reference = nil
-        lockProgress = 0
+        clearReference()
     }
 
-    /// Capture the current orientation as the "aligned" reference (call on the first exposure).
+    /// Capture the current orientation as the reference (call on the first exposure).
     func setReference() {
         reference = motion.deviceMotion?.attitude.copy() as? CMAttitude
-        lockProgress = reference == nil ? 0 : 1
+        levelOffset = .zero
+        roll = 0
+        isCentered = reference != nil
     }
 
-    /// Drop the reference so the ring reads neutral until the next stack starts.
+    /// Drop the reference so the reticle reads neutral until the next stack starts.
     func clearReference() {
         reference = nil
-        lockProgress = 0
+        levelOffset = .zero
+        roll = 0
+        isCentered = false
     }
 
     private func update(with current: CMAttitude) {
         guard let reference else { return }
         let rel = current.copy() as! CMAttitude
         rel.multiply(byInverseOf: reference)
-        let dev = abs(rel.quaternion.angle)
-        let target: Double
-        if dev <= lockedThreshold {
-            target = 1                                  // solid green within the locked zone
-        } else {
-            target = max(0, 1 - (dev - lockedThreshold) / (maxDeviation - lockedThreshold))
-        }
-        lockProgress += (target - lockProgress) * smoothing
-    }
-}
 
-private extension CMQuaternion {
-    /// Rotation angle (radians) represented by this quaternion.
-    var angle: Double { 2 * acos(max(-1, min(1, w))) }
+        // Yaw → horizontal, pitch → vertical (signs tuned for on-screen feel).
+        let nx = clamp(rel.yaw / maxDeviation)
+        let ny = clamp(rel.pitch / maxDeviation)
+        let sx = levelOffset.width + (nx - levelOffset.width) * smoothing
+        let sy = levelOffset.height + (ny - levelOffset.height) * smoothing
+        levelOffset = CGSize(width: sx, height: sy)
+        roll += (rel.roll - roll) * smoothing
+
+        let dev = hypot(rel.yaw, rel.pitch)
+        isCentered = dev <= centeredThreshold && abs(rel.roll) <= centeredThreshold
+    }
+
+    private func clamp(_ v: Double) -> Double { max(-1, min(1, v)) }
 }

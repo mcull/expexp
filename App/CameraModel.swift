@@ -4,7 +4,6 @@ import Photos
 import UIKit
 import CoreImage
 import Vision
-import Combine
 
 @MainActor
 class CameraModel: ObservableObject {
@@ -34,10 +33,8 @@ class CameraModel: ObservableObject {
     /// Briefly true when a just-captured frame could not be aligned (Magic on).
     @Published var showAlignmentWarning: Bool = false
 
-    /// Live "lock" value 0…1 for the shutter ring (mirrored from LockMonitor).
-    @Published var lockProgress: Double = 0
-    private let lockMonitor = LockMonitor()
-    private var lockObservation: AnyCancellable?
+    /// Gyro level-reticle source; the controls observe it directly.
+    let lockMonitor = LockMonitor()
 
     /// Context label for the Raw/Lock control.
     var modeLabel: String {
@@ -97,9 +94,6 @@ class CameraModel: ObservableObject {
                 await setUpRotationCoordinator()
                 captureCameraPosition = await captureService.currentCameraPosition
                 lockMonitor.start()
-                lockObservation = lockMonitor.$lockProgress.sink { [weak self] value in
-                    self?.lockProgress = value
-                }
             } catch {
                 alertMessage = "Failed to set up camera: \(error.localizedDescription)"
                 showAlert = true
