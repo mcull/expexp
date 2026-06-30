@@ -2,10 +2,18 @@ import CoreImage
 
 /// A selectable finishing "look" applied on top of the linear-average blend.
 /// `.filmic` is the shipping default; `.neutral` and `.moody` exist for a future in-app picker.
-enum BlendLook {
+enum BlendLook: CaseIterable {
     case neutral
     case filmic
     case moody
+
+    var displayName: String {
+        switch self {
+        case .neutral: return "Neutral"
+        case .filmic:  return "Filmic"
+        case .moody:   return "Moody"
+        }
+    }
 
     /// Applies this look's tone curve / color treatment to an sRGB CIImage and returns sRGB.
     func apply(to image: CIImage) -> CIImage {

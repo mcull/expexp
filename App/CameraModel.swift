@@ -24,14 +24,25 @@ class CameraModel: ObservableObject {
 
     /// Alignment of each captured frame relative to frame 0 (parallel to capturedRawImages).
     private var transforms: [FrameAlignment] = []
-    /// Active camera position, used to pick the alignment anchor.
-    private var captureCameraPosition: AVCaptureDevice.Position = .back
+    /// Active camera position, used to pick the alignment anchor and the mode label.
+    @Published private(set) var captureCameraPosition: AVCaptureDevice.Position = .back
     /// Anchor: front camera freezes the face (selfie swirl); back camera freezes the scene.
     private var currentAnchor: AlignmentAnchor {
         captureCameraPosition == .front ? .face : .scene
     }
     /// Briefly true when a just-captured frame could not be aligned (Magic on).
     @Published var showAlignmentWarning: Bool = false
+
+    /// Live "lock" value 0…1 for the shutter ring (driven by LockMonitor in Phase B; 0 until then).
+    @Published var lockProgress: Double = 0
+
+    /// Context label for the Raw/Lock control.
+    var modeLabel: String {
+        guard isAlignmentEnabled else { return "Raw" }
+        return captureCameraPosition == .front ? "Face Lock" : "Edge Lock"
+    }
+    /// True when a stack is in progress (≥1 exposure) — used to show count/ring/discard.
+    var hasStack: Bool { !capturedPhotos.isEmpty }
 
     @Published var isAuthorized = false
     @Published var isSessionRunning = false
