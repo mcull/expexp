@@ -30,8 +30,21 @@ struct CameraControlsView: View {
             // Main row: flip · shutter · save
             ZStack {
                 HStack {
-                    iconButton("arrow.triangle.2.circlepath.camera", action: cameraModel.switchCamera)
-                        .opacity(0.85)
+                    HStack(spacing: 14) {
+                        iconButton("arrow.triangle.2.circlepath.camera", action: cameraModel.switchCamera)
+                            .opacity(0.85)
+                        if let thumb = cameraModel.recentSavedThumbnail {
+                            Button(action: cameraModel.openPhotosApp) {
+                                Image(uiImage: thumb)
+                                    .resizable().scaledToFill()
+                                    .frame(width: 40, height: 40)
+                                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(.white.opacity(0.85), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
+                    }
                     Spacer()
                     saveButton
                         .opacity(cameraModel.hasStack ? 1 : 0)
