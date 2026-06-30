@@ -4,6 +4,7 @@ import Photos
 import UIKit
 import CoreImage
 import Vision
+import Combine
 
 @MainActor
 class CameraModel: ObservableObject {
@@ -33,8 +34,10 @@ class CameraModel: ObservableObject {
     /// Briefly true when a just-captured frame could not be aligned (Magic on).
     @Published var showAlignmentWarning: Bool = false
 
-    /// Live "lock" value 0…1 for the shutter ring (driven by LockMonitor in Phase B; 0 until then).
+    /// Live "lock" value 0…1 for the shutter ring (mirrored from LockMonitor).
     @Published var lockProgress: Double = 0
+    private let lockMonitor = LockMonitor()
+    private var lockObservation: AnyCancellable?
 
     /// Context label for the Raw/Lock control.
     var modeLabel: String {
@@ -93,6 +96,10 @@ class CameraModel: ObservableObject {
                 isSessionRunning = true
                 await setUpRotationCoordinator()
                 captureCameraPosition = await captureService.currentCameraPosition
+                lockMonitor.start()
+                lockObservation = lockMonitor.$lockProgress.sink { [weak self] value in
+                    self?.lockProgress = value
+                }
             } catch {
                 alertMessage = "Failed to set up camera: \(error.localizedDescription)"
                 showAlert = true
@@ -170,6 +177,7 @@ class CameraModel: ObservableObject {
                 // Compute this frame's alignment relative to the first (reference) frame.
                 if capturedRawImages.count == 1 {
                     transforms = [.identity]
+                    lockMonitor.setReference()
                 } else if isAlignmentEnabled, let reference = capturedRawImages.first {
                     let a = AlignmentService.alignment(moving: image, reference: reference, anchor: currentAnchor)
                     transforms.append(a)
@@ -269,6 +277,7 @@ class CameraModel: ObservableObject {
                 ghostPreviewImages.removeAll()
                 transforms.removeAll()
                 lockedCaptureAngle = nil  // next stack picks a fresh orientation
+                lockMonitor.clearReference()
                 previewView?.setOverlayImage(nil, opacity: 0)
             } catch {
                 alertMessage = "Failed to save photo: \(error.localizedDescription)"
@@ -283,6 +292,7 @@ class CameraModel: ObservableObject {
         ghostPreviewImages.removeAll()
         transforms.removeAll()
         lockedCaptureAngle = nil  // next stack picks a fresh orientation
+        lockMonitor.clearReference()
         previewView?.setOverlayImage(nil, opacity: 0)
     }
 
