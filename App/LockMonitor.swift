@@ -11,8 +11,10 @@ final class LockMonitor: ObservableObject {
 
     private let motion = CMMotionManager()
     private var reference: CMAttitude?
-    /// Angular deviation (radians) at which lock reads 0. ~8° feels right for handheld jitter.
-    private let maxDeviation: Double = 8 * .pi / 180
+    /// Within this deviation, treat as fully locked (ring solid green). Generous for handheld.
+    private let lockedThreshold: Double = 4 * .pi / 180   // 4°
+    /// Deviation at which the ring reads empty (0). Between this and `lockedThreshold` it ramps.
+    private let maxDeviation: Double = 16 * .pi / 180      // 16°
     /// EMA smoothing factor (0..1); lower = smoother.
     private let smoothing: Double = 0.2
 
@@ -48,7 +50,12 @@ final class LockMonitor: ObservableObject {
         let rel = current.copy() as! CMAttitude
         rel.multiply(byInverseOf: reference)
         let dev = abs(rel.quaternion.angle)
-        let target = max(0, 1 - dev / maxDeviation)
+        let target: Double
+        if dev <= lockedThreshold {
+            target = 1                                  // solid green within the locked zone
+        } else {
+            target = max(0, 1 - (dev - lockedThreshold) / (maxDeviation - lockedThreshold))
+        }
         lockProgress += (target - lockProgress) * smoothing
     }
 }
