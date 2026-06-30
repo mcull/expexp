@@ -16,6 +16,7 @@
 		5B6F920C337AAE5E1772BBCE /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4886568650B9CA47DDF2557 /* CameraModel.swift */; };
 		7DC4241358EF1505BCDD0BB8 /* AlignmentDesign.md in Resources */ = {isa = PBXBuildFile; fileRef = 459D5F7DB5E29632298EB2E6 /* AlignmentDesign.md */; };
 		8B36ECBE8F487D79C5BF6AAD /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */; };
+		CCCC0001AABBCCDDEEFF0001 /* CameraControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCCC0002AABBCCDDEEFF0002 /* CameraControlsView.swift */; };
 		B3A794C7E99842CCF0752169 /* ExpexpApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEECD1650CE94D6154C6435C /* ExpexpApp.swift */; };
 		E9E1D9E6232CD798B2DD5CFE /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F00CB5A1F0A38703B90A7F /* CameraPreview.swift */; };
 		FEB64FAEB271E33507EA2D68 /* PhotoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473324B840A3C861AB6DEE7B /* PhotoCapture.swift */; };
@@ -30,6 +31,7 @@
 		B1BAFF4F16BE251D02D56ACE /* CaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureService.swift; sourceTree = "<group>"; };
 		B4886568650B9CA47DDF2557 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
 		BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		CCCC0002AABBCCDDEEFF0002 /* CameraControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraControlsView.swift; sourceTree = "<group>"; };
 		AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlignmentService.swift; sourceTree = "<group>"; };
 		AAAA0004AABBCCDDEEFF0004 /* ExposureCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureCompositor.swift; sourceTree = "<group>"; };
 		BBBB0002AABBCCDDEEFF0002 /* BlendLook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlendLook.swift; sourceTree = "<group>"; };
@@ -46,6 +48,7 @@
 				24F00CB5A1F0A38703B90A7F /* CameraPreview.swift */,
 				B1BAFF4F16BE251D02D56ACE /* CaptureService.swift */,
 				BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */,
+				CCCC0002AABBCCDDEEFF0002 /* CameraControlsView.swift */,
 				CEECD1650CE94D6154C6435C /* ExpexpApp.swift */,
 				FC7A21DA945374E0AB9E4119 /* Info.plist */,
 				473324B840A3C861AB6DEE7B /* PhotoCapture.swift */,
@@ -168,6 +171,7 @@
 				E9E1D9E6232CD798B2DD5CFE /* CameraPreview.swift in Sources */,
 				22DF97CBF42275A497D93BE4 /* CaptureService.swift in Sources */,
 				8B36ECBE8F487D79C5BF6AAD /* ContentView.swift in Sources */,
+				CCCC0001AABBCCDDEEFF0001 /* CameraControlsView.swift in Sources */,
 				B3A794C7E99842CCF0752169 /* ExpexpApp.swift in Sources */,
 				FEB64FAEB271E33507EA2D68 /* PhotoCapture.swift in Sources */,
 				54DE4DAB09F183B9C6339907 /* PhotoLibraryService.swift in Sources */,
