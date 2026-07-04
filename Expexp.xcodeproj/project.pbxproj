@@ -7,21 +7,21 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AAAA0001AABBCCDDEEFF0001 /* AlignmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */; };
-		AAAA0003AABBCCDDEEFF0003 /* ExposureCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA0004AABBCCDDEEFF0004 /* ExposureCompositor.swift */; };
-		BBBB0001AABBCCDDEEFF0001 /* BlendLook.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBB0002AABBCCDDEEFF0002 /* BlendLook.swift */; };
 		22DF97CBF42275A497D93BE4 /* CaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1BAFF4F16BE251D02D56ACE /* CaptureService.swift */; };
 		4A590F31656D669E38695834 /* AlignmentLog.md in Resources */ = {isa = PBXBuildFile; fileRef = 78AFEF0582375267184506FB /* AlignmentLog.md */; };
 		54DE4DAB09F183B9C6339907 /* PhotoLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5C57E4FF8C4AEA431FC2506 /* PhotoLibraryService.swift */; };
 		5B6F920C337AAE5E1772BBCE /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4886568650B9CA47DDF2557 /* CameraModel.swift */; };
 		7DC4241358EF1505BCDD0BB8 /* AlignmentDesign.md in Resources */ = {isa = PBXBuildFile; fileRef = 459D5F7DB5E29632298EB2E6 /* AlignmentDesign.md */; };
 		8B36ECBE8F487D79C5BF6AAD /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */; };
+		AAAA0001AABBCCDDEEFF0001 /* AlignmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */; };
+		AAAA0003AABBCCDDEEFF0003 /* ExposureCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA0004AABBCCDDEEFF0004 /* ExposureCompositor.swift */; };
+		B3A794C7E99842CCF0752169 /* ExpexpApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEECD1650CE94D6154C6435C /* ExpexpApp.swift */; };
+		BBBB0001AABBCCDDEEFF0001 /* BlendLook.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBB0002AABBCCDDEEFF0002 /* BlendLook.swift */; };
 		CCCC0001AABBCCDDEEFF0001 /* CameraControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCCC0002AABBCCDDEEFF0002 /* CameraControlsView.swift */; };
 		DDDD0001AABBCCDDEEFF0001 /* LockMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDDD0002AABBCCDDEEFF0002 /* LockMonitor.swift */; };
-		B3A794C7E99842CCF0752169 /* ExpexpApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEECD1650CE94D6154C6435C /* ExpexpApp.swift */; };
 		E9E1D9E6232CD798B2DD5CFE /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F00CB5A1F0A38703B90A7F /* CameraPreview.swift */; };
-		FEB64FAEB271E33507EA2D68 /* PhotoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473324B840A3C861AB6DEE7B /* PhotoCapture.swift */; };
 		EEEE0001AABBCCDDEEFF0001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EEEE0002AABBCCDDEEFF0002 /* Assets.xcassets */; };
+		FEB64FAEB271E33507EA2D68 /* PhotoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473324B840A3C861AB6DEE7B /* PhotoCapture.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,18 +30,18 @@
 		459D5F7DB5E29632298EB2E6 /* AlignmentDesign.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AlignmentDesign.md; sourceTree = "<group>"; };
 		473324B840A3C861AB6DEE7B /* PhotoCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCapture.swift; sourceTree = "<group>"; };
 		78AFEF0582375267184506FB /* AlignmentLog.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AlignmentLog.md; sourceTree = "<group>"; };
-		B1BAFF4F16BE251D02D56ACE /* CaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureService.swift; sourceTree = "<group>"; };
-		B4886568650B9CA47DDF2557 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
-		BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		CCCC0002AABBCCDDEEFF0002 /* CameraControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraControlsView.swift; sourceTree = "<group>"; };
-		DDDD0002AABBCCDDEEFF0002 /* LockMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockMonitor.swift; sourceTree = "<group>"; };
 		AAAA0002AABBCCDDEEFF0002 /* AlignmentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlignmentService.swift; sourceTree = "<group>"; };
 		AAAA0004AABBCCDDEEFF0004 /* ExposureCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureCompositor.swift; sourceTree = "<group>"; };
+		B1BAFF4F16BE251D02D56ACE /* CaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureService.swift; sourceTree = "<group>"; };
+		B4886568650B9CA47DDF2557 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
 		BBBB0002AABBCCDDEEFF0002 /* BlendLook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlendLook.swift; sourceTree = "<group>"; };
+		BEC1CEB119DB17FCFF76CBA5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		CCCC0002AABBCCDDEEFF0002 /* CameraControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraControlsView.swift; sourceTree = "<group>"; };
 		CEECD1650CE94D6154C6435C /* ExpexpApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpexpApp.swift; sourceTree = "<group>"; };
 		D5C57E4FF8C4AEA431FC2506 /* PhotoLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryService.swift; sourceTree = "<group>"; };
-		FC7A21DA945374E0AB9E4119 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		DDDD0002AABBCCDDEEFF0002 /* LockMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockMonitor.swift; sourceTree = "<group>"; };
 		EEEE0002AABBCCDDEEFF0002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FC7A21DA945374E0AB9E4119 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -196,7 +196,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = N7ZX6XG86A;
+				DEVELOPMENT_TEAM = 73H96ZRS8L;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -204,7 +204,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ventures.cull.expexp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cullventures.expexp;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -222,7 +222,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = N7ZX6XG86A;
+				DEVELOPMENT_TEAM = 73H96ZRS8L;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -230,7 +230,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ventures.cull.expexp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cullventures.expexp;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
