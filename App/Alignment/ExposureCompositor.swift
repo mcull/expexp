@@ -5,6 +5,16 @@ import CoreImage
 /// Produces an equal-weight, order-independent, coverage-weighted average of the aligned frames
 /// in LINEAR light, finished with a `BlendLook` tone curve.
 enum ExposureCompositor {
+    /// How much a growing stack dims each layer. A strict average divides by the frame count,
+    /// so every one of `n` layers contributes only `1/n` — by the 4th or 5th shot each layer is
+    /// nearly invisible. After averaging we lift the result by `count^(1 - layerPersistence)`,
+    /// which keeps later layers readable while preserving the "averages down" feel.
+    ///   1.0 → strict average (flat brightness, original behavior)
+    ///   0.7 → gentle lift (gain ≈ 1.3× at 3 shots, 1.6× at 5) — current default
+    ///   0.5 → stronger, more additive (gain ≈ 1.7× at 3, 2.2× at 5; may bloom highlights)
+    /// Nudge this one number to taste.
+    static let layerPersistence: CGFloat = 0.5
+
     /// Linear-light working space for the averaging stage.
     private static let linearContext: CIContext = {
         if let linear = CGColorSpace(name: CGColorSpace.linearSRGB) {
@@ -58,10 +68,25 @@ enum ExposureCompositor {
         }
         guard let averaged = acc else { return nil }
 
+        // 2b. Lift the average so a tall stack's faint layers stay readable (see `layerPersistence`).
+        //     Scales RGB in linear light; leaves alpha (coverage) untouched.
+        let gain = pow(CGFloat(max(positioned.count, 1)), 1 - layerPersistence)
+        let lifted: CIImage
+        if abs(gain - 1) < 0.001 {
+            lifted = averaged
+        } else {
+            lifted = averaged.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: gain, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: gain, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: gain, w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+            ])
+        }
+
         // 3. Render the linear average to sRGB pixels.
         let pxRect = CGRect(x: 0, y: 0, width: canvasSize.width * scale, height: canvasSize.height * scale)
         let renderSpace = sRGB ?? CGColorSpaceCreateDeviceRGB()
-        guard let avgCG = linearContext.createCGImage(averaged, from: pxRect, format: .RGBA8, colorSpace: renderSpace) else {
+        guard let avgCG = linearContext.createCGImage(lifted, from: pxRect, format: .RGBA8, colorSpace: renderSpace) else {
             return nil
         }
 

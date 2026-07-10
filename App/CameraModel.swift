@@ -22,6 +22,12 @@ class CameraModel: ObservableObject {
     /// no stack is in progress; reset on save/clear so the next stack picks a fresh orientation.
     private var lockedCaptureAngle: CGFloat?
 
+    /// Physical device orientation (`videoRotationAngleForHorizonLevelCapture`) locked at the
+    /// first exposure. Unlike the preview angle — which is pinned to portrait because the UI is
+    /// portrait-locked — this tracks how the phone is actually held, so we can rotate the saved
+    /// composite upright. 90 = portrait (no rotation); 0/180 = landscape; 270 = upside-down.
+    private var lockedCaptureHorizonAngle: CGFloat?
+
     /// Alignment of each captured frame relative to frame 0 (parallel to capturedRawImages).
     private var transforms: [FrameAlignment] = []
     /// Active camera position, used to pick the alignment anchor and the mode label.
@@ -155,6 +161,7 @@ class CameraModel: ObservableObject {
                 // then apply it for every shot so the whole stack stays portrait or landscape.
                 if capturedRawImages.isEmpty {
                     lockedCaptureAngle = rotationCoordinator?.videoRotationAngleForHorizonLevelPreview
+                    lockedCaptureHorizonAngle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
                 }
                 if let angle = lockedCaptureAngle {
                     await applyCaptureAngle(angle)
@@ -244,14 +251,18 @@ class CameraModel: ObservableObject {
                     print("🖼️ DEBUG: Composite failed; saved first frame")
                 }
 
-                print("🖼️ DEBUG: Final image size: \(finalImage.size)")
-                
+                // Bake the stack's capture orientation into the pixels so landscape stacks save
+                // upright (the live preview already rotates by this same delta; the save path
+                // must too, or landscape saves come out a quarter-turn off).
+                let savedImage = orientedForSave(finalImage)
+                print("🖼️ DEBUG: Final image size: \(savedImage.size)")
+
                 // Save the final image and capture local identifier for deeplink
-                let localId = try await photoLibraryService.saveImageReturningLocalIdentifier(finalImage)
+                let localId = try await photoLibraryService.saveImageReturningLocalIdentifier(savedImage)
                 self.recentSavedLocalIdentifier = localId
 
                 // Show transient thumbnail instead of success alert
-                if let thumb = makeThumbnail(from: finalImage, maxSide: 64) {
+                if let thumb = makeThumbnail(from: savedImage, maxSide: 64) {
                     recentSavedThumbnail = thumb
                     withAnimation(.easeOut(duration: 0.2)) {
                         showSavedThumbnail = true
@@ -271,6 +282,7 @@ class CameraModel: ObservableObject {
                 ghostPreviewImages.removeAll()
                 transforms.removeAll()
                 lockedCaptureAngle = nil  // next stack picks a fresh orientation
+                lockedCaptureHorizonAngle = nil
                 lockMonitor.clearReference()
                 previewView?.setOverlayImage(nil, opacity: 0)
             } catch {
@@ -286,6 +298,7 @@ class CameraModel: ObservableObject {
         ghostPreviewImages.removeAll()
         transforms.removeAll()
         lockedCaptureAngle = nil  // next stack picks a fresh orientation
+        lockedCaptureHorizonAngle = nil
         lockMonitor.clearReference()
         previewView?.setOverlayImage(nil, opacity: 0)
     }
@@ -312,12 +325,28 @@ class CameraModel: ObservableObject {
                                                      canvasSize: canvas,
                                                      scale: UIScreen.main.scale,
                                                      look: blendLook)
-        let display = composite.flatMap { rotatedForPreview($0, degrees: delta) }
+        let display = composite.flatMap { rotated($0, degrees: delta) }
         previewView?.setOverlayImage(display, opacity: CGFloat(1.0 - ghostOpacity))
     }
 
+    /// Rotates the saved composite to match the stack's capture orientation. Uses the same
+    /// `delta` the live preview applies, so what you shot in landscape saves upright (90° CCW
+    /// for back-camera landscape). Portrait → delta 0 → returned unchanged.
+    private func orientedForSave(_ image: UIImage) -> UIImage {
+        // The composite is always baked portrait (the capture connection is pinned to the
+        // portrait-locked preview), so in landscape the scene sits sideways in a tall frame.
+        // `videoRotationAngleForHorizonLevelCapture` reports how the phone is actually held:
+        // 90 = portrait. Rotating by (angle − 90) brings the composite upright — 0° in portrait,
+        // 90° CCW / CW in the two landscapes, 180° upside-down.
+        let horizonAngle = lockedCaptureHorizonAngle
+            ?? rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
+            ?? 90
+        let degrees = horizonAngle - 90
+        return rotated(image, degrees: degrees)
+    }
+
     /// Rotates an image by a multiple of 90° (for matching the live preview orientation).
-    private func rotatedForPreview(_ image: UIImage, degrees: CGFloat) -> UIImage {
+    private func rotated(_ image: UIImage, degrees: CGFloat) -> UIImage {
         let norm = ((Int(degrees.rounded()) % 360) + 360) % 360
         guard norm != 0 else { return image }
         let radians = CGFloat(norm) * .pi / 180
